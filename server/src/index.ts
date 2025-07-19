@@ -21,6 +21,10 @@ const rooms: Room = {};
 const playerWords: Record<string, Record<string, string[]>> = {};
 // Track confirmed players per room
 const confirmedPlayers: Record<string, Set<string>> = {};
+// Track revealed words and wrong guesses per room
+const revealedWords: Record<string, Record<string, number[]>> = {};
+const wrongGuesses: Record<string, string[]> = {};
+let turnOrder: Record<string, string[]> = {};
 
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
@@ -66,6 +70,63 @@ io.on("connection", (socket) => {
           firstTurn,
         });
       }
+    }
+  );
+
+  socket.on(
+    "make_guess",
+    ({ roomCode, playerId, guess, viewOpponent }: { roomCode: string; playerId: string; guess: string; viewOpponent: boolean }) => {
+      // Defensive checks
+      if (!playerWords[roomCode] || !rooms[roomCode]) return;
+      // Determine whose words are being guessed
+      const opponentId = rooms[roomCode].find((p) => p.id !== playerId)?.id;
+      if (!opponentId) return;
+      // Initialize revealedWords and wrongGuesses if needed
+      if (!revealedWords[roomCode]) revealedWords[roomCode] = {};
+      if (!revealedWords[roomCode][opponentId]) revealedWords[roomCode][opponentId] = [];
+      if (!wrongGuesses[roomCode]) wrongGuesses[roomCode] = [];
+      // Get opponent's words
+      const wordsToGuess = playerWords[roomCode][opponentId] || [];
+      // Check if guess matches any unrevealed word
+      let correct = false;
+      let index = -1;
+      for (let i = 0; i < wordsToGuess.length; i++) {
+        if (
+          wordsToGuess[i].toLowerCase() === guess.trim().toLowerCase() &&
+          !revealedWords[roomCode][opponentId].includes(i)
+        ) {
+          correct = true;
+          index = i;
+          break;
+        }
+      }
+      let nextTurn = opponentId;
+      if (correct && index !== -1) {
+        revealedWords[roomCode][opponentId].push(index);
+        // Check for win
+        if (revealedWords[roomCode][opponentId].length === 8) {
+          io.to(roomCode).emit("game_end", {
+            winner: playerId,
+            players: [
+              { id: playerId, words: playerWords[roomCode][playerId] },
+              { id: opponentId, words: playerWords[roomCode][opponentId] },
+            ],
+          });
+          return;
+        }
+        // Player continues turn
+        nextTurn = playerId;
+      } else {
+        wrongGuesses[roomCode].push(guess);
+        // Switch turn
+        nextTurn = opponentId;
+      }
+      io.to(roomCode).emit("guess_result", {
+        correct,
+        index: correct ? index : undefined,
+        guess,
+        nextTurn,
+      });
     }
   );
 

@@ -24,6 +24,8 @@ function App() {
   const [wrongGuesses, setWrongGuesses] = useState<string[]>([]);
   const [guess, setGuess] = useState("");
   const [currentTurn, setCurrentTurn] = useState<string>(""); // playerId of current turn
+  const [winner, setWinner] = useState<string | null>(null);
+  const [finalWords, setFinalWords] = useState<{ id: string; words: string[] }[]>([]);
 
   useEffect(() => {
     socket.on("players_updated", (updatedPlayers: Player[]) => {
@@ -69,11 +71,18 @@ function App() {
       }
     );
 
+    socket.on("game_end", (data: { winner: string; players: { id: string; words: string[] }[] }) => {
+      setGameStarted(false);
+      setWinner(data.winner);
+      setFinalWords(data.players);
+    });
+
     return () => {
       socket.off("players_updated");
       socket.off("player_confirmed");
       socket.off("start_game");
       socket.off("guess_result");
+      socket.off("game_end");
     };
   }, []);
 
@@ -254,6 +263,24 @@ function App() {
               </button>
               {waitingForOpponent && <p>Waiting for opponent to confirm...</p>}
             </>
+          )}
+          {winner && (
+            <div style={{ marginTop: 32 }}>
+              <h2>Game Over!</h2>
+              <h3>{winner === socket.id ? "You win!" : "Opponent wins!"}</h3>
+              <div>
+                {finalWords.map((p) => (
+                  <div key={p.id}>
+                    <h4>{p.id === socket.id ? "Your Words" : "Opponent's Words"}</h4>
+                    <ul>
+                      {p.words.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </>
       )}
