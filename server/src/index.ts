@@ -52,11 +52,19 @@ io.on("connection", (socket) => {
       const playersInRoom = rooms[roomCode] || [];
       if (confirmedPlayers[roomCode].size === 2 && playersInRoom.length === 2) {
         // Build both players' word sequences
-        const wordSequences: Record<string, string[]> = {};
-        for (const player of playersInRoom) {
-          wordSequences[player.id] = playerWords[roomCode][player.id] || [];
-        }
-        io.to(roomCode).emit("start_game", wordSequences);
+        const playersWithWords = playersInRoom.map((player) => ({
+          id: player.id,
+          name: player.name,
+          words: playerWords[roomCode][player.id] || [],
+        }));
+        // Randomly select first turn
+        const firstTurn =
+          playersWithWords[Math.floor(Math.random() * playersWithWords.length)]
+            .id;
+        io.to(roomCode).emit("start_game", {
+          players: playersWithWords,
+          firstTurn,
+        });
       }
     }
   );
