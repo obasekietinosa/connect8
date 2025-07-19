@@ -25,7 +25,9 @@ function App() {
   const [guess, setGuess] = useState("");
   const [currentTurn, setCurrentTurn] = useState<string>(""); // playerId of current turn
   const [winner, setWinner] = useState<string | null>(null);
-  const [finalWords, setFinalWords] = useState<{ id: string; words: string[] }[]>([]);
+  const [finalWords, setFinalWords] = useState<
+    { id: string; words: string[] }[]
+  >([]);
 
   useEffect(() => {
     socket.on("players_updated", (updatedPlayers: Player[]) => {
@@ -60,10 +62,18 @@ function App() {
         index?: number;
         guess: string;
         nextTurn: string;
+        revealed: number[];
+        playerId: string;
       }) => {
-        if (result.correct && typeof result.index === "number") {
-          setGuessedWords((prev) => [...prev, result.index as number]);
-        } else {
+        // Only update guessedWords if this client made the guess
+        if (
+          result.correct &&
+          result.playerId === socket.id &&
+          result.revealed.length > 0
+        ) {
+          setGuessedWords((prev) => [...prev, ...result.revealed]);
+        }
+        if (!result.correct) {
           setWrongGuesses((prev) => [...prev, result.guess]);
         }
         setCurrentTurn(result.nextTurn);
@@ -71,11 +81,17 @@ function App() {
       }
     );
 
-    socket.on("game_end", (data: { winner: string; players: { id: string; words: string[] }[] }) => {
-      setGameStarted(false);
-      setWinner(data.winner);
-      setFinalWords(data.players);
-    });
+    socket.on(
+      "game_end",
+      (data: {
+        winner: string;
+        players: { id: string; words: string[] }[];
+      }) => {
+        setGameStarted(false);
+        setWinner(data.winner);
+        setFinalWords(data.players);
+      }
+    );
 
     return () => {
       socket.off("players_updated");
@@ -271,7 +287,9 @@ function App() {
               <div>
                 {finalWords.map((p) => (
                   <div key={p.id}>
-                    <h4>{p.id === socket.id ? "Your Words" : "Opponent's Words"}</h4>
+                    <h4>
+                      {p.id === socket.id ? "Your Words" : "Opponent's Words"}
+                    </h4>
                     <ul>
                       {p.words.map((w, i) => (
                         <li key={i}>{w}</li>

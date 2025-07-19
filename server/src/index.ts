@@ -75,7 +75,17 @@ io.on("connection", (socket) => {
 
   socket.on(
     "make_guess",
-    ({ roomCode, playerId, guess, viewOpponent }: { roomCode: string; playerId: string; guess: string; viewOpponent: boolean }) => {
+    ({
+      roomCode,
+      playerId,
+      guess,
+      viewOpponent,
+    }: {
+      roomCode: string;
+      playerId: string;
+      guess: string;
+      viewOpponent: boolean;
+    }) => {
       // Defensive checks
       if (!playerWords[roomCode] || !rooms[roomCode]) return;
       // Determine whose words are being guessed
@@ -83,7 +93,8 @@ io.on("connection", (socket) => {
       if (!opponentId) return;
       // Initialize revealedWords and wrongGuesses if needed
       if (!revealedWords[roomCode]) revealedWords[roomCode] = {};
-      if (!revealedWords[roomCode][opponentId]) revealedWords[roomCode][opponentId] = [];
+      if (!revealedWords[roomCode][opponentId])
+        revealedWords[roomCode][opponentId] = [];
       if (!wrongGuesses[roomCode]) wrongGuesses[roomCode] = [];
       // Get opponent's words
       const wordsToGuess = playerWords[roomCode][opponentId] || [];
@@ -101,6 +112,12 @@ io.on("connection", (socket) => {
         }
       }
       let nextTurn = opponentId;
+      let revealedForGuesser = revealedWords[roomCode][opponentId].filter(
+        (idx) => {
+          // Only show words guessed by this player
+          return correct && playerId === socket.id ? idx === index : false;
+        }
+      );
       if (correct && index !== -1) {
         revealedWords[roomCode][opponentId].push(index);
         // Check for win
@@ -126,6 +143,8 @@ io.on("connection", (socket) => {
         index: correct ? index : undefined,
         guess,
         nextTurn,
+        revealed: correct ? [index] : [], // Only send the index just guessed
+        playerId,
       });
     }
   );
