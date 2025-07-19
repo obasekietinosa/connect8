@@ -120,8 +120,11 @@ io.on("connection", (socket) => {
       );
       if (correct && index !== -1) {
         revealedWords[roomCode][opponentId].push(index);
-        // Check for win
-        if (revealedWords[roomCode][opponentId].length === 8) {
+        // Check for win (exclude first word, index 0)
+        const revealedNonFirst = revealedWords[roomCode][opponentId].filter(
+          (i) => i !== 0
+        );
+        if (revealedNonFirst.length === 7) {
           io.to(roomCode).emit("game_end", {
             winner: playerId,
             players: [
@@ -148,6 +151,26 @@ io.on("connection", (socket) => {
       });
     }
   );
+
+  socket.on("reset_game", ({ roomCode }: { roomCode: string }) => {
+    // Reset all game state for this room except player list
+    if (playerWords[roomCode]) {
+      for (const pid in playerWords[roomCode]) {
+        playerWords[roomCode][pid] = [];
+      }
+    }
+    if (confirmedPlayers[roomCode]) {
+      confirmedPlayers[roomCode].clear();
+    }
+    if (revealedWords[roomCode]) {
+      for (const pid in revealedWords[roomCode]) {
+        revealedWords[roomCode][pid] = [];
+      }
+    }
+    wrongGuesses[roomCode] = [];
+    // Notify clients to re-enter words
+    io.to(roomCode).emit("game_reset");
+  });
 
   socket.on("disconnect", () => {
     for (const roomCode in rooms) {

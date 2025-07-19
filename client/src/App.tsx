@@ -93,12 +93,29 @@ function App() {
       }
     );
 
+    socket.on("game_reset", () => {
+      // Reset all game state except room/joined/players
+      setWords(Array(8).fill(""));
+      setConfirmed(false);
+      setConfirmedPlayers([]);
+      setGameStarted(false);
+      setOpponentWords([]);
+      setViewOpponent(true);
+      setGuessedWords([]);
+      setWrongGuesses([]);
+      setGuess("");
+      setCurrentTurn("");
+      setWinner(null);
+      setFinalWords([]);
+    });
+
     return () => {
       socket.off("players_updated");
       socket.off("player_confirmed");
       socket.off("start_game");
       socket.off("guess_result");
       socket.off("game_end");
+      socket.off("game_reset");
     };
   }, []);
 
@@ -185,6 +202,24 @@ function App() {
 
   const waitingForOpponent =
     confirmed && confirmedPlayers.length === 1 && players.length > 1;
+
+  const handlePlayAgain = () => {
+    // Reset all game state except room/joined/players
+    setWords(Array(8).fill(""));
+    setConfirmed(false);
+    setConfirmedPlayers([]);
+    setGameStarted(false);
+    setOpponentWords([]);
+    setViewOpponent(true);
+    setGuessedWords([]);
+    setWrongGuesses([]);
+    setGuess("");
+    setCurrentTurn("");
+    setWinner(null);
+    setFinalWords([]);
+    // Notify server to reset game state for this room
+    socket.emit("reset_game", { roomCode: room });
+  };
 
   return (
     <div style={{ padding: 20 }}>
@@ -298,6 +333,9 @@ function App() {
                   </div>
                 ))}
               </div>
+              <button onClick={handlePlayAgain} style={{ marginTop: 16 }}>
+                Play Again
+              </button>
             </div>
           )}
         </>
