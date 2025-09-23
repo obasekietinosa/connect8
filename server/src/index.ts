@@ -177,7 +177,7 @@ io.on("connection", (socket) => {
       const filtered = rooms[roomCode].filter((p) => p.id !== socket.id);
       rooms[roomCode] = filtered;
       io.to(roomCode).emit("players_updated", filtered);
-      // Clean up playerWords and confirmedPlayers for this player
+      // Clean up playerWords and confirmedPlayers for this player.
       if (playerWords[roomCode]) {
         delete playerWords[roomCode][socket.id];
       }
