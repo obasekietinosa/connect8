@@ -189,6 +189,8 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(3001, () =>
-  console.log("Server listening on http://localhost:3001")
+const PORT = process.env.PORT || process.argv[2] || 3001;
+
+server.listen(PORT, () =>
+  console.log(`Server listening on http://localhost:${PORT}`)
 );
