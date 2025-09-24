@@ -1,7 +1,21 @@
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
+import { useLocation } from "react-router-dom";
 
 const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:3001");
+
+function generateRoomCode(length: number = 6): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0, O, 1, I
+  let code = "";
+  for (let i = 0; i < length; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+function useQuery(): URLSearchParams {
+  return new URLSearchParams(window.location.search);
+}
 
 interface Player {
   id: string;
@@ -10,26 +24,39 @@ interface Player {
 }
 
 function App() {
-  const [name, setName] = useState("");
-  const [room, setRoom] = useState("");
+  const [name, setName] = useState<string>("");
+  const [room, setRoom] = useState<string>("");
   const [players, setPlayers] = useState<Player[]>([]);
-  const [joined, setJoined] = useState(false);
+  const [joined, setJoined] = useState<boolean>(false);
   const [words, setWords] = useState<string[]>(Array(8).fill(""));
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmed, setConfirmed] = useState<boolean>(false);
   const [confirmedPlayers, setConfirmedPlayers] = useState<string[]>([]);
-  const [gameStarted, setGameStarted] = useState(false);
+  const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [opponentWords, setOpponentWords] = useState<string[]>([]);
-  const [viewOpponent, setViewOpponent] = useState(true);
+  const [viewOpponent, setViewOpponent] = useState<boolean>(true);
   const [guessedWords, setGuessedWords] = useState<number[]>([]); // indices of guessed words
   const [wrongGuesses, setWrongGuesses] = useState<string[]>([]);
-  const [guess, setGuess] = useState("");
+  const [guess, setGuess] = useState<string>("");
   const [currentTurn, setCurrentTurn] = useState<string>(""); // playerId of current turn
   const [winner, setWinner] = useState<string | null>(null);
   const [finalWords, setFinalWords] = useState<
     { id: string; words: string[] }[]
   >([]);
+  const [showLanding, setShowLanding] = useState<boolean>(true);
+  const [error, setError] = useState<string>("");
+  const location = useLocation();
+  const query = useQuery();
 
-  useEffect(() => {
+  useEffect((): void => {
+    // If there's a join code in the URL, prefill and go to join screen
+    const code = query.get("code");
+    if (code) {
+      setRoom(code.toUpperCase());
+      setShowLanding(false);
+    }
+  }, [location.search]);
+
+  useEffect((): (() => void) => {
     socket.on("players_updated", (updatedPlayers: Player[]) => {
       setPlayers(updatedPlayers);
     });
@@ -43,17 +70,20 @@ function App() {
       });
     });
 
-    socket.on("start_game", (data) => {
-      // Defensive: check if data.players exists and is an array
-      const playersArr = Array.isArray(data?.players) ? data.players : [];
-      const opponent = playersArr.find((p: Player) => p.id !== socket.id);
-      setOpponentWords(opponent && opponent.words ? opponent.words : []);
-      setGameStarted(true);
-      setCurrentTurn(data?.firstTurn ?? "");
-      setGuessedWords([]);
-      setWrongGuesses([]);
-      setViewOpponent(true);
-    });
+    socket.on(
+      "start_game",
+      (data: { players: Player[]; firstTurn: string }) => {
+        // Defensive: check if data.players exists and is an array
+        const playersArr = Array.isArray(data?.players) ? data.players : [];
+        const opponent = playersArr.find((p: Player) => p.id !== socket.id);
+        setOpponentWords(opponent && opponent.words ? opponent.words : []);
+        setGameStarted(true);
+        setCurrentTurn(data?.firstTurn ?? "");
+        setGuessedWords([]);
+        setWrongGuesses([]);
+        setViewOpponent(true);
+      }
+    );
 
     socket.on(
       "guess_result",
@@ -109,7 +139,7 @@ function App() {
       setFinalWords([]);
     });
 
-    return () => {
+    return (): void => {
       socket.off("players_updated");
       socket.off("player_confirmed");
       socket.off("start_game");
@@ -119,22 +149,34 @@ function App() {
     };
   }, []);
 
-  const joinRoom = () => {
-    if (name && room) {
-      socket.emit("join_room", { roomCode: room, playerName: name });
-      setJoined(true);
-    }
+  const handleStartGame = (): void => {
+    const newCode = generateRoomCode();
+    setRoom(newCode);
+    setShowLanding(false);
   };
 
-  const handleWordChange = (index: number, value: string) => {
+  const handleJoinGame = (): void => {
+    setShowLanding(false);
+    setRoom("");
+    setError("");
+  };
+
+  const joinRoom = (): void => {
+    if (!name || !room) return;
+    socket.emit("join_room", { roomCode: room, playerName: name });
+    setJoined(true);
+    setError("");
+  };
+
+  const handleWordChange = (index: number, value: string): void => {
     const newWords = [...words];
     newWords[index] = value;
     setWords(newWords);
   };
 
-  const allWordsFilled = words.every((word) => word.trim() !== "");
+  const allWordsFilled: boolean = words.every((word) => word.trim() !== "");
 
-  const confirmWords = () => {
+  const confirmWords = (): void => {
     socket.emit("confirm_words", {
       roomCode: room,
       playerId: socket.id ?? "",
@@ -149,7 +191,7 @@ function App() {
     });
   };
 
-  const handleGuess = () => {
+  const handleGuess = (): void => {
     if (!guess.trim()) return;
     socket.emit("make_guess", {
       roomCode: room,
@@ -159,12 +201,12 @@ function App() {
     });
   };
 
-  const renderOpponentWords = () => {
+  const renderOpponentWords = (): React.JSX.Element => {
     return (
       <div>
         <h3>Opponent's Words</h3>
         <ul>
-          {opponentWords.map((word, idx) => {
+          {opponentWords.map((word: string, idx: number) => {
             if (idx === 0) return <li key={idx}>{word}</li>;
             const revealed = guessedWords.includes(idx);
             return (
@@ -172,7 +214,18 @@ function App() {
                 {revealed
                   ? word
                   : word
-                  ? word[0] + "_".repeat(word.length - 1)
+                  ? word[0] +
+                    word
+                      .slice(1)
+                      .split("")
+                      .map((_, i) => (
+                        <span
+                          style={{ marginRight: 4, letterSpacing: 2 }}
+                          key={i}
+                        >
+                          _
+                        </span>
+                      ))
                   : ""}
               </li>
             );
@@ -182,12 +235,12 @@ function App() {
     );
   };
 
-  const renderOwnWords = () => {
+  const renderOwnWords = (): React.JSX.Element => {
     return (
       <div>
         <h3>Your Words</h3>
         <ul>
-          {words.map((word, idx) => {
+          {words.map((word: string, idx: number) => {
             const guessed = guessedWords.includes(idx);
             return (
               <li key={idx} style={{ color: guessed ? "green" : undefined }}>
@@ -200,10 +253,10 @@ function App() {
     );
   };
 
-  const waitingForOpponent =
+  const waitingForOpponent: boolean =
     confirmed && confirmedPlayers.length === 1 && players.length > 1;
 
-  const handlePlayAgain = () => {
+  const handlePlayAgain = (): void => {
     // Reset all game state except room/joined/players
     setWords(Array(8).fill(""));
     setConfirmed(false);
@@ -221,23 +274,88 @@ function App() {
     socket.emit("reset_game", { roomCode: room });
   };
 
+  // Share URL logic
+  const shareUrl: string = `${window.location.origin}/join?code=${room}`;
+  const handleShare = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      alert("Room link copied to clipboard!");
+    } catch {
+      window.prompt("Copy this link to share:", shareUrl);
+    }
+  };
+
+  if (showLanding) {
+    return (
+      <div
+        style={{
+          padding: 32,
+          maxWidth: 500,
+          margin: "auto",
+          textAlign: "center",
+        }}
+      >
+        <img
+          src="/logo.png"
+          alt="8Words Logo"
+          style={{ width: 80, marginBottom: 16 }}
+        />
+        <h1>Welcome to 8Words</h1>
+        <p>
+          8Words is a real-time, two-player word guessing game. Enter 8
+          connected words, take turns guessing, and race to reveal your
+          opponent's sequence!
+        </p>
+        <div style={{ margin: 24 }}>
+          <button onClick={handleStartGame} style={{ marginRight: 16 }}>
+            Start a New Game
+          </button>
+          <button onClick={handleJoinGame}>Join a Game</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: 20 }}>
       {!joined ? (
-        <>
-          <h2>Join Connect8 Game</h2>
+        <div
+          style={{
+            padding: 32,
+            maxWidth: 400,
+            margin: "auto",
+            textAlign: "center",
+          }}
+        >
+          <h2>{room ? `Join Room: ${room}` : "Join a Game"}</h2>
           <input
             placeholder="Your name"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            style={{ marginBottom: 12, width: "100%" }}
           />
           <input
             placeholder="Room code"
             value={room}
-            onChange={(e) => setRoom(e.target.value)}
+            onChange={(e) => setRoom(e.target.value.toUpperCase())}
+            style={{ marginBottom: 12, width: "100%" }}
+            maxLength={8}
           />
-          <button onClick={joinRoom}>Join Room</button>
-        </>
+          <button onClick={joinRoom} style={{ width: "100%" }}>
+            Join Room
+          </button>
+          {error && <div style={{ color: "red", marginTop: 8 }}>{error}</div>}
+          <div style={{ marginTop: 24 }}>
+            <button
+              onClick={() => {
+                setShowLanding(true);
+                setRoom("");
+              }}
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
       ) : (
         <>
           <h2>Room: {room}</h2>
@@ -292,6 +410,12 @@ function App() {
                   </ul>
                 </div>
               )}
+              <div style={{ margin: "16px 0" }}>
+                <button onClick={handleShare}>Share Room Link</button>
+                <div style={{ fontSize: 12, color: "#888" }}>
+                  or share code: <b>{room}</b>
+                </div>
+              </div>
             </>
           ) : (
             <>
