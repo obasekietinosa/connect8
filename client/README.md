@@ -1,3 +1,40 @@
+# Connect8 Client
+
+This is the frontend for Connect8, a real-time, two-player word-guessing game developed almost exclusively by prompting AI tools.
+
+## Setup & Running
+
+1. Install dependencies:
+   ```sh
+   npm install
+   ```
+2. Create a `.env` file (optional) to specify the backend server URL:
+   ```sh
+   echo "VITE_SOCKET_URL=http://localhost:3001" > .env
+   ```
+   If not set, defaults to `http://localhost:3001`.
+3. Start the development server:
+   ```sh
+   npm run dev
+   ```
+
+## How to Play
+- Enter your name and a room code to join a game.
+- Enter 8 logically connected words.
+- Confirm your words and wait for your opponent.
+- Take turns guessing each other's words. The first word is always visible; others are masked.
+- Correct guesses reveal words and let you keep guessing. Wrong guesses end your turn.
+- First to reveal all opponent's words (except the first) wins!
+
+## Features
+- Real-time updates via Socket.IO
+- Animated feedback for correct and wrong guesses
+- Play again/rematch support
+
+## Development
+- Built with React + Vite + TypeScript
+- Most features implemented by prompting GitHub Copilot and AI tools.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
