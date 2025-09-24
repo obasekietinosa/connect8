@@ -1,9 +1,8 @@
 import React from "react";
-import { GameState, Player } from "../types";
+import type { GameState } from "../types";
 
 interface GameBoardProps {
   state: GameState;
-  me: Player;
   onGuess: (guess: string) => void;
   guessValue: string;
   setGuessValue: (v: string) => void;
@@ -11,14 +10,14 @@ interface GameBoardProps {
   celebratory: boolean;
 }
 
-const GameBoard: React.FC<GameBoardProps> = ({ state, me, onGuess, guessValue, setGuessValue, error, celebratory }) => (
+const GameBoard: React.FC<GameBoardProps> = ({ state, onGuess, guessValue, setGuessValue, error, celebratory }) => (
   <div style={{ padding: 32, maxWidth: 600, margin: "auto", textAlign: "center" }}>
     <h2>8Words Game</h2>
     <div style={{ margin: 16 }}>
       <b>Your words left:</b> {state.myWordsLeft.join(", ")}
     </div>
     <div style={{ margin: 16 }}>
-      <b>Opponent's words left:</b> {state.opponentWordsLeft.map(w => w.revealed ? w.word : "?").join(", ")}
+      <b>Opponent's words left:</b> {state.opponentWordsLeft.map((w: { word: string; revealed: boolean }) => w.revealed ? w.word : "?").join(", ")}
     </div>
     <form onSubmit={e => { e.preventDefault(); onGuess(guessValue); }}>
       <input

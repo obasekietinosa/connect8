@@ -129,7 +129,6 @@ function App() {
           opponentWordsLeft: opponentWords.map((word, idx) => ({ word, revealed: guessedWords.includes(idx) })),
           isMyTurn: currentTurn === (socket.id ?? ""),
         }}
-        me={{ id: socket.id ?? "", name, words }}
         onGuess={handleGuess}
         guessValue={guess}
         setGuessValue={setGuess}

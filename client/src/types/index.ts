@@ -22,3 +22,14 @@ export interface StartGameData {
   players: Player[];
   firstTurn: string;
 }
+
+export interface RevealedWord {
+  word: string;
+  revealed: boolean;
+}
+
+export interface GameState {
+  myWordsLeft: string[];
+  opponentWordsLeft: RevealedWord[];
+  isMyTurn: boolean;
+}
