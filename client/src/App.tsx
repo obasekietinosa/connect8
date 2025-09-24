@@ -365,6 +365,14 @@ function App() {
               <li key={p.id}>{p.name}</li>
             ))}
           </ul>
+          {!gameStarted && joined && (
+            <div style={{ margin: "16px 0" }}>
+              <button onClick={handleShare}>Share Room Link</button>
+              <div style={{ fontSize: 12, color: "#888" }}>
+                or share code: <b>{room}</b>
+              </div>
+            </div>
+          )}
           {gameStarted ? (
             <>
               <h2>Game Started!</h2>
