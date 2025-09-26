@@ -12,6 +12,12 @@ const ShareRoom: React.FC<ShareRoomProps> = ({ room, shareUrl, onShare }) => (
     <div style={{ fontSize: 12, color: "#888" }}>
       or share code: <b>{room}</b>
     </div>
+    <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+      link: {" "}
+      <a href={shareUrl} target="_blank" rel="noreferrer">
+        {shareUrl}
+      </a>
+    </div>
   </div>
 );
 
