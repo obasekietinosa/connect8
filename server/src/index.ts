@@ -12,7 +12,7 @@ const io = new Server(server, {
   },
 });
 
-type Player = { id: string; name: string };
+type Player = { id: string; name: string; connected: boolean };
 type Room = Record<string, Player[]>;
 
 const rooms: Room = {};
@@ -24,18 +24,106 @@ const confirmedPlayers: Record<string, Set<string>> = {};
 // Track revealed words and wrong guesses per room
 const revealedWords: Record<string, Record<string, number[]>> = {};
 const wrongGuesses: Record<string, string[]> = {};
-let turnOrder: Record<string, string[]> = {};
+const currentTurn: Record<string, string> = {};
+const gameStatus: Record<
+  string,
+  { started: boolean; winner: string | null; finalWords: { id: string; words: string[] }[] }
+> = {};
+const disconnectedPlayers: Record<
+  string,
+  Record<string, { name: string; words: string[]; confirmed: boolean; revealed: number[] }>
+> = {};
+
+const emitRoomState = (roomCode: string) => {
+  const playersInRoom = rooms[roomCode] || [];
+  const confirmed = Array.from(confirmedPlayers[roomCode] || []);
+  const words = playerWords[roomCode] || {};
+  const revealed = revealedWords[roomCode] || {};
+  const wrong = wrongGuesses[roomCode] || [];
+  const status = gameStatus[roomCode] || {
+    started: false,
+    winner: null,
+    finalWords: [],
+  };
+  io.to(roomCode).emit("room_state", {
+    players: playersInRoom,
+    confirmedPlayers: confirmed,
+    gameStarted: status.started,
+    currentTurn: currentTurn[roomCode] || "",
+    playerWords: words,
+    revealedWords: revealed,
+    wrongGuesses: wrong,
+    winner: status.winner,
+    finalWords: status.finalWords,
+  });
+};
 
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
   socket.on(
     "join_room",
-    ({ roomCode, playerName }: { roomCode: string; playerName: string }) => {
+    ({
+      roomCode,
+      playerName,
+      previousSocketId,
+    }: {
+      roomCode: string;
+      playerName: string;
+      previousSocketId?: string;
+    }) => {
       if (!rooms[roomCode]) rooms[roomCode] = [];
-      rooms[roomCode].push({ id: socket.id, name: playerName });
+      if (!playerWords[roomCode]) playerWords[roomCode] = {};
+      if (!confirmedPlayers[roomCode]) confirmedPlayers[roomCode] = new Set();
+      if (!revealedWords[roomCode]) revealedWords[roomCode] = {};
+      if (!wrongGuesses[roomCode]) wrongGuesses[roomCode] = [];
+      if (!gameStatus[roomCode]) {
+        gameStatus[roomCode] = { started: false, winner: null, finalWords: [] };
+      }
+
+      let restored = false;
+      if (previousSocketId) {
+        const snapshot = disconnectedPlayers[roomCode]?.[previousSocketId];
+        if (snapshot) {
+          const playerIndex = rooms[roomCode].findIndex(
+            (p) => p.id === previousSocketId
+          );
+          if (playerIndex !== -1) {
+            rooms[roomCode][playerIndex] = {
+              id: socket.id,
+              name: snapshot.name,
+              connected: true,
+            };
+          } else {
+            rooms[roomCode].push({ id: socket.id, name: snapshot.name, connected: true });
+          }
+          playerWords[roomCode][socket.id] = snapshot.words;
+          if (confirmedPlayers[roomCode] && snapshot.confirmed) {
+            confirmedPlayers[roomCode].add(socket.id);
+          }
+          revealedWords[roomCode][socket.id] = snapshot.revealed;
+          if (currentTurn[roomCode] === previousSocketId) {
+            currentTurn[roomCode] = socket.id;
+          }
+          delete playerWords[roomCode][previousSocketId];
+          delete revealedWords[roomCode][previousSocketId];
+          if (confirmedPlayers[roomCode]) {
+            confirmedPlayers[roomCode].delete(previousSocketId);
+          }
+          if (disconnectedPlayers[roomCode]) {
+            delete disconnectedPlayers[roomCode][previousSocketId];
+          }
+          restored = true;
+        }
+      }
+
+      if (!restored) {
+        rooms[roomCode].push({ id: socket.id, name: playerName, connected: true });
+      }
+
       socket.join(roomCode);
       io.to(roomCode).emit("players_updated", rooms[roomCode]);
+      emitRoomState(roomCode);
     }
   );
 
@@ -52,6 +140,7 @@ io.on("connection", (socket) => {
       confirmedPlayers[roomCode].add(socket.id);
       // Notify room that this player has confirmed
       io.to(roomCode).emit("player_confirmed", socket.id);
+      emitRoomState(roomCode);
       // If both players have confirmed, start the game
       const playersInRoom = rooms[roomCode] || [];
       if (confirmedPlayers[roomCode].size === 2 && playersInRoom.length === 2) {
@@ -65,10 +154,13 @@ io.on("connection", (socket) => {
         const firstTurn =
           playersWithWords[Math.floor(Math.random() * playersWithWords.length)]
             .id;
+        currentTurn[roomCode] = firstTurn;
+        gameStatus[roomCode] = { started: true, winner: null, finalWords: [] };
         io.to(roomCode).emit("start_game", {
           players: playersWithWords,
           firstTurn,
         });
+        emitRoomState(roomCode);
       }
     }
   );
@@ -112,12 +204,6 @@ io.on("connection", (socket) => {
         }
       }
       let nextTurn = opponentId;
-      let revealedForGuesser = revealedWords[roomCode][opponentId].filter(
-        (idx) => {
-          // Only show words guessed by this player
-          return correct && playerId === socket.id ? idx === index : false;
-        }
-      );
       if (correct && index !== -1) {
         revealedWords[roomCode][opponentId].push(index);
         // Check for win (exclude first word, index 0)
@@ -125,6 +211,15 @@ io.on("connection", (socket) => {
           (i) => i !== 0
         );
         if (revealedNonFirst.length === 7) {
+          gameStatus[roomCode] = {
+            started: false,
+            winner: playerId,
+            finalWords: [
+              { id: playerId, words: playerWords[roomCode][playerId] || [] },
+              { id: opponentId, words: playerWords[roomCode][opponentId] || [] },
+            ],
+          };
+          emitRoomState(roomCode);
           io.to(roomCode).emit("game_end", {
             winner: playerId,
             players: [
@@ -149,6 +244,8 @@ io.on("connection", (socket) => {
         revealed: correct ? [index] : [], // Only send the index just guessed
         playerId,
       });
+      currentTurn[roomCode] = nextTurn;
+      emitRoomState(roomCode);
     }
   );
 
@@ -168,22 +265,30 @@ io.on("connection", (socket) => {
       }
     }
     wrongGuesses[roomCode] = [];
+    currentTurn[roomCode] = "";
+    gameStatus[roomCode] = { started: false, winner: null, finalWords: [] };
     // Notify clients to re-enter words
     io.to(roomCode).emit("game_reset");
+    emitRoomState(roomCode);
   });
 
   socket.on("disconnect", () => {
     for (const roomCode in rooms) {
-      const filtered = rooms[roomCode].filter((p) => p.id !== socket.id);
-      rooms[roomCode] = filtered;
-      io.to(roomCode).emit("players_updated", filtered);
-      // Clean up playerWords and confirmedPlayers for this player.
-      if (playerWords[roomCode]) {
-        delete playerWords[roomCode][socket.id];
+      const playerIndex = rooms[roomCode].findIndex((p) => p.id === socket.id);
+      if (playerIndex === -1) continue;
+      const player = rooms[roomCode][playerIndex];
+      if (!disconnectedPlayers[roomCode]) {
+        disconnectedPlayers[roomCode] = {};
       }
-      if (confirmedPlayers[roomCode]) {
-        confirmedPlayers[roomCode].delete(socket.id);
-      }
+      disconnectedPlayers[roomCode][socket.id] = {
+        name: player.name,
+        words: playerWords[roomCode]?.[socket.id] || [],
+        confirmed: confirmedPlayers[roomCode]?.has(socket.id) ?? false,
+        revealed: revealedWords[roomCode]?.[socket.id] || [],
+      };
+      rooms[roomCode][playerIndex] = { ...player, connected: false };
+      io.to(roomCode).emit("players_updated", rooms[roomCode]);
+      emitRoomState(roomCode);
     }
     console.log("User disconnected:", socket.id);
   });

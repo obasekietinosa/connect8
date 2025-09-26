@@ -2,6 +2,7 @@ export interface Player {
   id: string;
   name: string;
   words?: string[];
+  connected?: boolean;
 }
 
 export interface GameEndData {
@@ -32,4 +33,16 @@ export interface GameState {
   myWordsLeft: string[];
   opponentWordsLeft: RevealedWord[];
   isMyTurn: boolean;
+}
+
+export interface RoomStatePayload {
+  players: Player[];
+  confirmedPlayers: string[];
+  gameStarted: boolean;
+  currentTurn: string;
+  playerWords: Record<string, string[]>;
+  revealedWords: Record<string, number[]>;
+  wrongGuesses: string[];
+  winner: string | null;
+  finalWords: { id: string; words: string[] }[];
 }
