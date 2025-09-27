@@ -13,6 +13,20 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
 
 const STORAGE_KEY = "connect8:lastJoinDetails";
 
+const generatePlayerId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `player-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+};
+
+type JoinDetails = {
+  room: string;
+  name: string;
+  lastSocketId: string | null;
+  playerId: string | null;
+};
+
 export function useSocket(room: string, name: string) {
   const [socket] = useState<Socket>(() => io(SOCKET_URL));
   const [players, setPlayers] = useState<Player[]>([]);
@@ -28,22 +42,28 @@ export function useSocket(room: string, name: string) {
   const [winner, setWinner] = useState<string | null>(null);
   const [finalWords, setFinalWords] = useState<GameEndData["players"]>([]);
 
-  let initialJoinDetails: { room: string; name: string; lastSocketId: string | null } | null =
-    null;
+  let initialJoinDetails: JoinDetails | null = null;
   if (typeof window !== "undefined") {
     const storedJoinDetails = window.sessionStorage.getItem(STORAGE_KEY);
     if (storedJoinDetails) {
       try {
-        initialJoinDetails = JSON.parse(storedJoinDetails);
+        const parsed = JSON.parse(storedJoinDetails);
+        initialJoinDetails = {
+          room: parsed.room ?? "",
+          name: parsed.name ?? "",
+          lastSocketId: parsed.lastSocketId ?? null,
+          playerId: typeof parsed.playerId === "string" ? parsed.playerId : null,
+        };
       } catch (error) {
         console.warn("Failed to parse stored join details", error);
         window.sessionStorage.removeItem(STORAGE_KEY);
       }
     }
   }
-  const lastJoinDetailsRef = useRef<
-    { room: string; name: string; lastSocketId: string | null } | null
-  >(initialJoinDetails);
+
+  const lastJoinDetailsRef = useRef<JoinDetails | null>(initialJoinDetails);
+  const playerIdRef = useRef<string | null>(initialJoinDetails?.playerId ?? null);
+  const [playerId, setPlayerId] = useState<string | null>(playerIdRef.current);
 
   const persistJoinDetails = useCallback(() => {
     const details = lastJoinDetailsRef.current;
@@ -55,14 +75,59 @@ export function useSocket(room: string, name: string) {
     }
   }, []);
 
+  const setAndPersistPlayerId = useCallback(
+    (id: string) => {
+      playerIdRef.current = id;
+      setPlayerId(id);
+      if (lastJoinDetailsRef.current) {
+        lastJoinDetailsRef.current.playerId = id;
+        persistJoinDetails();
+      }
+    },
+    [persistJoinDetails]
+  );
+
+  const syncPlayerIdFromPlayers = useCallback(
+    (list: Player[]) => {
+      if (!lastJoinDetailsRef.current) return;
+      if (!list.length) return;
+      const currentId = playerIdRef.current;
+      if (currentId && list.some((player) => player.id === currentId)) {
+        return;
+      }
+      const match = list.find((player) => player.socketId === (socket.id ?? ""));
+      if (match) {
+        setAndPersistPlayerId(match.id);
+      }
+    },
+    [setAndPersistPlayerId, socket]
+  );
+
   useEffect(() => {
-    socket.on("players_updated", setPlayers);
-    socket.on("player_confirmed", (playerId: string) => {
-      setConfirmedPlayers((prev) => prev.includes(playerId) ? prev : [...prev, playerId]);
-    });
-    socket.on("start_game", (data: StartGameData) => {
-      const opponent = data.players.find((p) => p.id !== socket.id);
-      const me = data.players.find((p) => p.id === socket.id);
+    const handlePlayersUpdated = (list: Player[]) => {
+      setPlayers(list);
+      syncPlayerIdFromPlayers(list);
+    };
+    const handlePlayerConfirmed = (confirmedId: string) => {
+      setConfirmedPlayers((prev) =>
+        prev.includes(confirmedId) ? prev : [...prev, confirmedId]
+      );
+    };
+    const getCurrentPlayerId = () => playerIdRef.current ?? null;
+
+    const handleStartGame = (data: StartGameData) => {
+      syncPlayerIdFromPlayers(data.players);
+      const currentId = getCurrentPlayerId();
+      let me = currentId
+        ? data.players.find((player) => player.id === currentId)
+        : undefined;
+      if (!me) {
+        me = data.players.find((player) => player.socketId === (socket.id ?? ""));
+        if (me) {
+          setAndPersistPlayerId(me.id);
+        }
+      }
+      const opponent = data.players.find((player) => player.id !== me?.id);
       const opponentFirstWord = opponent?.words?.[0]?.trim();
       const myFirstWord = me?.words?.[0]?.trim();
       setOpponentWords(opponent?.words || []);
@@ -73,10 +138,12 @@ export function useSocket(room: string, name: string) {
       setMyWrongGuesses([]);
       setOpponentWrongGuesses([]);
       setLastGuessResult(null);
-    });
-    socket.on("guess_result", (result: GuessResult) => {
+    };
+
+    const handleGuessResult = (result: GuessResult) => {
+      const currentId = getCurrentPlayerId();
       if (result.correct && result.revealed.length > 0) {
-        if (result.playerId === socket.id) {
+        if (currentId && result.playerId === currentId) {
           setMyGuessedWords((prev) => {
             const additions = result.revealed.filter((idx) => !prev.includes(idx));
             return additions.length ? [...prev, ...additions] : prev;
@@ -89,7 +156,7 @@ export function useSocket(room: string, name: string) {
         }
       }
       if (!result.correct) {
-        if (result.playerId === socket.id) {
+        if (currentId && result.playerId === currentId) {
           setMyWrongGuesses((prev) => [...prev, result.guess]);
         } else {
           setOpponentWrongGuesses((prev) => [...prev, result.guess]);
@@ -97,13 +164,15 @@ export function useSocket(room: string, name: string) {
       }
       setCurrentTurn(result.nextTurn);
       setLastGuessResult(result);
-    });
-    socket.on("game_end", (data: GameEndData) => {
+    };
+
+    const handleGameEnd = (data: GameEndData) => {
       setGameStarted(false);
       setWinner(data.winner);
       setFinalWords(data.players);
-    });
-    socket.on("game_reset", () => {
+    };
+
+    const handleGameReset = () => {
       setConfirmedPlayers([]);
       setGameStarted(false);
       setOpponentWords([]);
@@ -115,10 +184,16 @@ export function useSocket(room: string, name: string) {
       setWinner(null);
       setFinalWords([]);
       setLastGuessResult(null);
-    });
+    };
+
     const handleConnect = () => {
       const lastJoinDetails = lastJoinDetailsRef.current;
       if (lastJoinDetails) {
+        if (!lastJoinDetails.playerId) {
+          const newId = playerIdRef.current ?? generatePlayerId();
+          lastJoinDetails.playerId = newId;
+          setAndPersistPlayerId(newId);
+        }
         const previousSocketId =
           lastJoinDetails.lastSocketId && lastJoinDetails.lastSocketId !== socket.id
             ? lastJoinDetails.lastSocketId
@@ -127,33 +202,37 @@ export function useSocket(room: string, name: string) {
           roomCode: lastJoinDetails.room,
           playerName: lastJoinDetails.name,
           previousSocketId,
+          playerId: lastJoinDetails.playerId ?? undefined,
         });
         lastJoinDetails.lastSocketId = socket.id ?? null;
         persistJoinDetails();
       }
     };
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible" && !socket.connected) {
         socket.connect();
       }
     };
+
     const handleRoomState = (state: RoomStatePayload) => {
       setPlayers(state.players);
+      syncPlayerIdFromPlayers(state.players);
       setConfirmedPlayers(state.confirmedPlayers);
       setWinner(state.winner);
       setFinalWords(state.finalWords);
-      const myId = socket.id ?? "";
-      const opponent = state.players.find((p) => p.id !== myId);
+      const myId = playerIdRef.current ?? "";
+      const opponent = state.players.find((player) => player.id !== myId);
       const opponentId = opponent?.id ?? "";
       if (state.gameStarted) {
         setGameStarted(true);
-        setOpponentWords(state.playerWords[opponentId] || []);
-        setMyGuessedWords(state.revealedWords[opponentId] || []);
-        setOpponentGuessedWords(state.revealedWords[myId] || []);
+        setOpponentWords(opponentId ? state.playerWords[opponentId] || [] : []);
+        setMyGuessedWords(opponentId ? state.revealedWords[opponentId] || [] : []);
+        setOpponentGuessedWords(myId ? state.revealedWords[myId] || [] : []);
         const myWrong: string[] = [];
         const opponentWrong: string[] = [];
         (state.wrongGuesses as WrongGuess[] | undefined)?.forEach((entry) => {
-          if (entry.playerId === myId) {
+          if (myId && entry.playerId === myId) {
             myWrong.push(entry.guess);
           } else if (entry.playerId) {
             opponentWrong.push(entry.guess);
@@ -174,6 +253,7 @@ export function useSocket(room: string, name: string) {
         }
       }
     };
+
     const handleDisconnect = () => {
       if (lastJoinDetailsRef.current) {
         lastJoinDetailsRef.current.lastSocketId = socket.id ?? null;
@@ -181,46 +261,60 @@ export function useSocket(room: string, name: string) {
       }
     };
 
+    socket.on("players_updated", handlePlayersUpdated);
+    socket.on("player_confirmed", handlePlayerConfirmed);
+    socket.on("start_game", handleStartGame);
+    socket.on("guess_result", handleGuessResult);
+    socket.on("game_end", handleGameEnd);
+    socket.on("game_reset", handleGameReset);
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("room_state", handleRoomState);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      socket.off("players_updated");
-      socket.off("player_confirmed");
-      socket.off("start_game");
-      socket.off("guess_result");
-      socket.off("game_end");
-      socket.off("game_reset");
+      socket.off("players_updated", handlePlayersUpdated);
+      socket.off("player_confirmed", handlePlayerConfirmed);
+      socket.off("start_game", handleStartGame);
+      socket.off("guess_result", handleGuessResult);
+      socket.off("game_end", handleGameEnd);
+      socket.off("game_reset", handleGameReset);
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
       socket.off("room_state", handleRoomState);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [persistJoinDetails, socket]);
+  }, [persistJoinDetails, setAndPersistPlayerId, socket, syncPlayerIdFromPlayers]);
 
   const joinRoom = useCallback(() => {
     if (!name || !room) return;
-    const previousSocketId = lastJoinDetailsRef.current?.lastSocketId;
+    const previousDetails = lastJoinDetailsRef.current;
+    const previousSocketId = previousDetails?.lastSocketId;
+    let nextPlayerId = previousDetails?.playerId ?? playerIdRef.current ?? null;
+    if (!nextPlayerId) {
+      nextPlayerId = generatePlayerId();
+    }
     lastJoinDetailsRef.current = {
       room,
       name,
       lastSocketId: socket.id ?? null,
+      playerId: nextPlayerId,
     };
-    persistJoinDetails();
+    setAndPersistPlayerId(nextPlayerId);
     if (!socket.connected) {
       socket.connect();
     }
+    const currentSocketId = socket.id ?? "";
     socket.emit("join_room", {
       roomCode: room,
       playerName: name,
       previousSocketId:
-        previousSocketId && previousSocketId !== (socket.id ?? "")
+        previousSocketId && previousSocketId !== currentSocketId
           ? previousSocketId
           : undefined,
+      playerId: nextPlayerId,
     });
-  }, [name, persistJoinDetails, room, socket]);
+  }, [name, room, setAndPersistPlayerId, socket]);
 
   return {
     socket,
@@ -237,5 +331,6 @@ export function useSocket(room: string, name: string) {
     winner,
     finalWords,
     joinRoom,
+    playerId,
   };
 }

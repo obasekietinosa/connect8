@@ -8,6 +8,10 @@ export const wrongGuesses: Record<string, { playerId: string; guess: string }[]>
 export const currentTurn: Record<string, string> = {};
 export const gameStatus: Record<string, RoomStatus> = {};
 export const disconnectedPlayers: Record<string, Record<string, DisconnectedPlayerSnapshot>> = {};
+export const socketToPlayer: Record<
+  string,
+  { roomCode: string; playerId: string }
+> = {};
 
 export const ensureRoomState = (roomCode: string) => {
   if (!rooms[roomCode]) rooms[roomCode] = [];

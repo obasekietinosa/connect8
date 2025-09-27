@@ -2,129 +2,140 @@ import { Server, Socket } from "socket.io";
 
 import {
   confirmedPlayers,
-  currentTurn,
   disconnectedPlayers,
   ensureRoomState,
   playerWords,
   revealedWords,
   rooms,
-  wrongGuesses,
+  socketToPlayer,
 } from "../state";
 import { emitRoomState } from "../utils/emitRoomState";
-import { DisconnectedPlayerSnapshot, Player } from "../types";
-
-const migratePlayerState = (
-  roomCode: string,
-  previousSocketId: string,
-  socket: Socket,
-  playerName: string,
-  snapshot?: DisconnectedPlayerSnapshot
-) => {
-  const playersInRoom = rooms[roomCode];
-  const playerIndex = playersInRoom.findIndex((p) => p.id === previousSocketId);
-  const updatedPlayer: Player = {
-    id: socket.id,
-    name: snapshot?.name ?? playerName,
-    connected: true,
-  };
-
-  if (playerIndex !== -1) {
-    playersInRoom[playerIndex] = updatedPlayer;
-  } else {
-    playersInRoom.push(updatedPlayer);
-  }
-
-  const previousWords = snapshot?.words ?? playerWords[roomCode][previousSocketId] ?? [];
-  playerWords[roomCode][socket.id] = previousWords;
-
-  const previousRevealed =
-    snapshot?.revealed ?? revealedWords[roomCode][previousSocketId] ?? [];
-  revealedWords[roomCode][socket.id] = previousRevealed;
-
-  const wasConfirmed = snapshot?.confirmed ?? confirmedPlayers[roomCode].has(previousSocketId);
-  if (wasConfirmed) {
-    confirmedPlayers[roomCode].add(socket.id);
-  } else {
-    confirmedPlayers[roomCode].delete(socket.id);
-  }
-
-  if (wrongGuesses[roomCode]) {
-    wrongGuesses[roomCode] = wrongGuesses[roomCode].map((entry) =>
-      entry.playerId === previousSocketId ? { ...entry, playerId: socket.id } : entry
-    );
-  }
-
-  if (currentTurn[roomCode] === previousSocketId) {
-    currentTurn[roomCode] = socket.id;
-  }
-
-  if (previousSocketId !== socket.id) {
-    delete playerWords[roomCode][previousSocketId];
-    delete revealedWords[roomCode][previousSocketId];
-    confirmedPlayers[roomCode].delete(previousSocketId);
-    if (disconnectedPlayers[roomCode]) {
-      delete disconnectedPlayers[roomCode][previousSocketId];
-    }
-  }
-};
-
-const reviveExistingPlayer = (roomCode: string, playerName: string, socket: Socket) => {
-  const playersInRoom = rooms[roomCode];
-  const existingPlayerIndex = playersInRoom.findIndex(
-    (player) => player.name.toLowerCase() === playerName.toLowerCase()
-  );
-
-  if (existingPlayerIndex === -1) {
-    return false;
-  }
-
-  const previousSocketId = playersInRoom[existingPlayerIndex].id;
-  migratePlayerState(roomCode, previousSocketId, socket, playerName);
-  return true;
-};
+import { Player } from "../types";
 
 type JoinRoomPayload = {
   roomCode: string;
   playerName: string;
   previousSocketId?: string;
+  playerId?: string;
+};
+const ensurePlayerContainers = (roomCode: string, playerId: string) => {
+  if (!playerWords[roomCode][playerId]) {
+    playerWords[roomCode][playerId] = [];
+  }
+  if (!revealedWords[roomCode][playerId]) {
+    revealedWords[roomCode][playerId] = [];
+  }
 };
 
-const restoreDisconnectedPlayer = (
+const getExistingPlayer = (
   roomCode: string,
-  previousSocketId: string,
-  socket: Socket
+  {
+    playerId,
+    playerName,
+    previousSocketId,
+  }: { playerId?: string; playerName: string; previousSocketId?: string }
 ) => {
-  const snapshot = disconnectedPlayers[roomCode]?.[previousSocketId];
+  const playersInRoom = rooms[roomCode];
 
-  if (!snapshot) {
-    return false;
+  if (playerId) {
+    const byId = playersInRoom.find((player) => player.id === playerId);
+    if (byId) {
+      return byId;
+    }
   }
 
-  migratePlayerState(roomCode, previousSocketId, socket, snapshot.name, snapshot);
+  if (previousSocketId) {
+    const bySocket = playersInRoom.find((player) => player.socketId === previousSocketId);
+    if (bySocket) {
+      return bySocket;
+    }
+  }
 
-  return true;
+  const byName = playersInRoom.find(
+    (player) => player.name.toLowerCase() === playerName.toLowerCase()
+  );
+
+  return byName;
 };
 
 export const createJoinRoomHandler = (io: Server, socket: Socket) =>
-  ({ roomCode, playerName, previousSocketId }: JoinRoomPayload) => {
+  ({ roomCode, playerName, previousSocketId, playerId }: JoinRoomPayload) => {
     ensureRoomState(roomCode);
 
-    const restored = previousSocketId
-      ? restoreDisconnectedPlayer(roomCode, previousSocketId, socket)
-      : false;
+    const playersInRoom = rooms[roomCode];
+    const existingPlayer = getExistingPlayer(roomCode, {
+      playerId,
+      playerName,
+      previousSocketId,
+    });
 
-    const revived = restored ? false : reviveExistingPlayer(roomCode, playerName, socket);
+    const effectivePlayerId = existingPlayer?.id || playerId || socket.id;
+    const snapshotForId =
+      !existingPlayer && playerId
+        ? disconnectedPlayers[roomCode]?.[playerId]
+        : undefined;
 
-    if (!restored && !revived) {
-      const playersInRoom = rooms[roomCode];
+    if (existingPlayer) {
+      existingPlayer.name = playerName;
+      existingPlayer.connected = true;
+      existingPlayer.socketId = socket.id;
 
+      const snapshot = disconnectedPlayers[roomCode]?.[existingPlayer.id];
+      if (snapshot) {
+        playerWords[roomCode][existingPlayer.id] = snapshot.words;
+        revealedWords[roomCode][existingPlayer.id] = snapshot.revealed;
+        if (snapshot.confirmed) {
+          confirmedPlayers[roomCode].add(existingPlayer.id);
+        } else {
+          confirmedPlayers[roomCode].delete(existingPlayer.id);
+        }
+        delete disconnectedPlayers[roomCode][existingPlayer.id];
+      }
+
+      ensurePlayerContainers(roomCode, existingPlayer.id);
+
+      if (previousSocketId && previousSocketId !== socket.id) {
+        delete socketToPlayer[previousSocketId];
+      }
+    } else if (snapshotForId) {
+      const revivedPlayer: Player = {
+        id: playerId!,
+        name: snapshotForId.name ?? playerName,
+        connected: true,
+        socketId: socket.id,
+      };
+      playersInRoom.push(revivedPlayer);
+      playerWords[roomCode][playerId!] = snapshotForId.words;
+      revealedWords[roomCode][playerId!] = snapshotForId.revealed;
+      if (snapshotForId.confirmed) {
+        confirmedPlayers[roomCode].add(playerId!);
+      } else {
+        confirmedPlayers[roomCode].delete(playerId!);
+      }
+      delete disconnectedPlayers[roomCode][playerId!];
+      ensurePlayerContainers(roomCode, playerId!);
+    } else {
       if (playersInRoom.length >= 2) {
         socket.emit("room_full");
         return;
       }
 
-      const newPlayer: Player = { id: socket.id, name: playerName, connected: true };
+      const newPlayer: Player = {
+        id: effectivePlayerId,
+        name: playerName,
+        connected: true,
+        socketId: socket.id,
+      };
       playersInRoom.push(newPlayer);
+      ensurePlayerContainers(roomCode, effectivePlayerId);
+      confirmedPlayers[roomCode].delete(effectivePlayerId);
+    }
+
+    socketToPlayer[socket.id] = { roomCode, playerId: effectivePlayerId };
+    for (const [sockId, mapping] of Object.entries(socketToPlayer)) {
+      if (sockId !== socket.id && mapping.playerId === effectivePlayerId) {
+        delete socketToPlayer[sockId];
+      }
     }
 
     socket.join(roomCode);

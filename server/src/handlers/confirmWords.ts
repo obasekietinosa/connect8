@@ -8,6 +8,7 @@ import {
   playerWords,
   revealedWords,
   rooms,
+  socketToPlayer,
 } from "../state";
 import { emitRoomState } from "../utils/emitRoomState";
 
@@ -20,10 +21,18 @@ export const createConfirmWordsHandler = (io: Server, socket: Socket) =>
   ({ roomCode, words }: ConfirmWordsPayload) => {
     ensureRoomState(roomCode);
 
-    playerWords[roomCode][socket.id] = words;
-    confirmedPlayers[roomCode].add(socket.id);
+    const mapping = socketToPlayer[socket.id];
 
-    io.to(roomCode).emit("player_confirmed", socket.id);
+    if (!mapping || mapping.roomCode !== roomCode) {
+      return;
+    }
+
+    const { playerId } = mapping;
+
+    playerWords[roomCode][playerId] = words;
+    confirmedPlayers[roomCode].add(playerId);
+
+    io.to(roomCode).emit("player_confirmed", playerId);
     emitRoomState(io, roomCode);
 
     const playersInRoom = rooms[roomCode] || [];
@@ -33,6 +42,8 @@ export const createConfirmWordsHandler = (io: Server, socket: Socket) =>
         id: player.id,
         name: player.name,
         words: playerWords[roomCode][player.id] || [],
+        socketId: player.socketId,
+        connected: player.connected,
       }));
 
       if (!revealedWords[roomCode]) {

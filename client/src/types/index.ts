@@ -1,8 +1,9 @@
 export interface Player {
   id: string;
   name: string;
+  socketId: string;
+  connected: boolean;
   words?: string[];
-  connected?: boolean;
 }
 
 export interface GameEndData {
