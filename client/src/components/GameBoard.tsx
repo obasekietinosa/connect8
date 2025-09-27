@@ -80,14 +80,33 @@ const GameBoard: React.FC<GameBoardProps> = ({
   );
 
   const firstLetter = currentWord?.word?.[0] ?? "";
-  const missingLettersCount = Math.max((currentWord?.word?.length ?? 0) - 1, 0);
+  const currentWordText = currentWord?.word ?? "";
+
+  const tailCharacters = useMemo(() => currentWordText.slice(1).split(""), [currentWordText]);
+
+  const characterIndexToLetterIndex = useMemo(() => {
+    const map: Record<number, number> = {};
+    let letterIndex = 0;
+    tailCharacters.forEach((char, idx) => {
+      if (char !== " ") {
+        map[idx] = letterIndex;
+        letterIndex += 1;
+      }
+    });
+    return map;
+  }, [tailCharacters]);
+
+  const missingLettersCount = useMemo(() => Object.keys(characterIndexToLetterIndex).length, [
+    characterIndexToLetterIndex,
+  ]);
+
   const [letters, setLetters] = useState<string[]>(() => Array(missingLettersCount).fill(""));
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     setLetters(Array(missingLettersCount).fill(""));
     inputsRef.current = [];
-  }, [missingLettersCount, currentWord?.word]);
+  }, [missingLettersCount, currentWordText]);
 
   useEffect(() => {
     if (!state.isMyTurn || celebratory || letters.length === 0) return;
@@ -138,7 +157,10 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!state.isMyTurn || celebratory || !currentWord) return;
-    const guess = `${firstLetter}${letters.join("")}`;
+    const tailGuess = tailCharacters
+      .map((char, idx) => (char === " " ? " " : letters[characterIndexToLetterIndex[idx]] ?? ""))
+      .join("");
+    const guess = `${firstLetter}${tailGuess}`;
     if (!guess.trim()) return;
     onGuess(guess);
   };
@@ -332,25 +354,34 @@ const GameBoard: React.FC<GameBoardProps> = ({
               >
                 {firstLetter.toUpperCase()}
               </div>
-              {letters.map((letter, idx) => (
-                <input
-                  key={idx}
-                  ref={(el) => {
-                    inputsRef.current[idx] = el;
-                  }}
-                  type="text"
-                  inputMode="text"
-                  maxLength={1}
-                  value={letter}
-                  onChange={(event) => handleLetterChange(idx, event.target.value)}
-                  onKeyDown={(event) => handleKeyDown(idx, event)}
-                  disabled={!state.isMyTurn}
-                  style={{
-                    ...inputStyle,
-                    ...getInputStateStyles(state.isMyTurn),
-                  }}
-                />
-              ))}
+              {tailCharacters.map((char, idx) => {
+                if (char === " ") {
+                  return <div key={`space-${idx}`} style={{ width: 24 }} />;
+                }
+
+                const letterIndex = characterIndexToLetterIndex[idx];
+                const letterValue = letters[letterIndex] ?? "";
+
+                return (
+                  <input
+                    key={idx}
+                    ref={(el) => {
+                      inputsRef.current[letterIndex] = el;
+                    }}
+                    type="text"
+                    inputMode="text"
+                    maxLength={1}
+                    value={letterValue}
+                    onChange={(event) => handleLetterChange(letterIndex, event.target.value)}
+                    onKeyDown={(event) => handleKeyDown(letterIndex, event)}
+                    disabled={!state.isMyTurn}
+                    style={{
+                      ...inputStyle,
+                      ...getInputStateStyles(state.isMyTurn),
+                    }}
+                  />
+                );
+              })}
             </div>
             <button
               type="submit"
