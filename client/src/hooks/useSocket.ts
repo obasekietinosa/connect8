@@ -6,6 +6,7 @@ import type {
   GuessResult,
   RoomStatePayload,
   StartGameData,
+  WrongGuess,
 } from "../types";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
@@ -19,8 +20,11 @@ export function useSocket(room: string, name: string) {
   const [gameStarted, setGameStarted] = useState(false);
   const [opponentWords, setOpponentWords] = useState<string[]>([]);
   const [currentTurn, setCurrentTurn] = useState<string>("");
-  const [guessedWords, setGuessedWords] = useState<number[]>([]);
-  const [wrongGuesses, setWrongGuesses] = useState<string[]>([]);
+  const [myGuessedWords, setMyGuessedWords] = useState<number[]>([]);
+  const [opponentGuessedWords, setOpponentGuessedWords] = useState<number[]>([]);
+  const [myWrongGuesses, setMyWrongGuesses] = useState<string[]>([]);
+  const [opponentWrongGuesses, setOpponentWrongGuesses] = useState<string[]>([]);
+  const [lastGuessResult, setLastGuessResult] = useState<GuessResult | null>(null);
   const [winner, setWinner] = useState<string | null>(null);
   const [finalWords, setFinalWords] = useState<GameEndData["players"]>([]);
 
@@ -61,17 +65,35 @@ export function useSocket(room: string, name: string) {
       setOpponentWords(opponent?.words || []);
       setGameStarted(true);
       setCurrentTurn(data.firstTurn);
-      setGuessedWords([]);
-      setWrongGuesses([]);
+      setMyGuessedWords([]);
+      setOpponentGuessedWords([]);
+      setMyWrongGuesses([]);
+      setOpponentWrongGuesses([]);
+      setLastGuessResult(null);
     });
     socket.on("guess_result", (result: GuessResult) => {
-      if (result.correct && result.playerId === socket.id && result.revealed.length > 0) {
-        setGuessedWords((prev) => [...prev, ...result.revealed]);
+      if (result.correct && result.revealed.length > 0) {
+        if (result.playerId === socket.id) {
+          setMyGuessedWords((prev) => {
+            const additions = result.revealed.filter((idx) => !prev.includes(idx));
+            return additions.length ? [...prev, ...additions] : prev;
+          });
+        } else {
+          setOpponentGuessedWords((prev) => {
+            const additions = result.revealed.filter((idx) => !prev.includes(idx));
+            return additions.length ? [...prev, ...additions] : prev;
+          });
+        }
       }
       if (!result.correct) {
-        setWrongGuesses((prev) => [...prev, result.guess]);
+        if (result.playerId === socket.id) {
+          setMyWrongGuesses((prev) => [...prev, result.guess]);
+        } else {
+          setOpponentWrongGuesses((prev) => [...prev, result.guess]);
+        }
       }
       setCurrentTurn(result.nextTurn);
+      setLastGuessResult(result);
     });
     socket.on("game_end", (data: GameEndData) => {
       setGameStarted(false);
@@ -82,11 +104,14 @@ export function useSocket(room: string, name: string) {
       setConfirmedPlayers([]);
       setGameStarted(false);
       setOpponentWords([]);
-      setGuessedWords([]);
-      setWrongGuesses([]);
+      setMyGuessedWords([]);
+      setOpponentGuessedWords([]);
+      setMyWrongGuesses([]);
+      setOpponentWrongGuesses([]);
       setCurrentTurn("");
       setWinner(null);
       setFinalWords([]);
+      setLastGuessResult(null);
     });
     const handleConnect = () => {
       const lastJoinDetails = lastJoinDetailsRef.current;
@@ -112,22 +137,37 @@ export function useSocket(room: string, name: string) {
     const handleRoomState = (state: RoomStatePayload) => {
       setPlayers(state.players);
       setConfirmedPlayers(state.confirmedPlayers);
-      setWrongGuesses(state.wrongGuesses);
       setWinner(state.winner);
       setFinalWords(state.finalWords);
+      const myId = socket.id ?? "";
+      const opponent = state.players.find((p) => p.id !== myId);
+      const opponentId = opponent?.id ?? "";
       if (state.gameStarted) {
         setGameStarted(true);
-        const opponent = state.players.find((p) => p.id !== (socket.id ?? ""));
-        const opponentId = opponent?.id ?? "";
         setOpponentWords(state.playerWords[opponentId] || []);
-        setGuessedWords(state.revealedWords[opponentId] || []);
+        setMyGuessedWords(state.revealedWords[opponentId] || []);
+        setOpponentGuessedWords(state.revealedWords[myId] || []);
+        const myWrong: string[] = [];
+        const opponentWrong: string[] = [];
+        (state.wrongGuesses as WrongGuess[] | undefined)?.forEach((entry) => {
+          if (entry.playerId === myId) {
+            myWrong.push(entry.guess);
+          } else if (entry.playerId) {
+            opponentWrong.push(entry.guess);
+          }
+        });
+        setMyWrongGuesses(myWrong);
+        setOpponentWrongGuesses(opponentWrong);
         setCurrentTurn(state.currentTurn);
       } else {
         setGameStarted(false);
         setCurrentTurn(state.currentTurn || "");
         if (!state.winner) {
           setOpponentWords([]);
-          setGuessedWords([]);
+          setMyGuessedWords([]);
+          setOpponentGuessedWords([]);
+          setMyWrongGuesses([]);
+          setOpponentWrongGuesses([]);
         }
       }
     };
@@ -186,8 +226,11 @@ export function useSocket(room: string, name: string) {
     gameStarted,
     opponentWords,
     currentTurn,
-    guessedWords,
-    wrongGuesses,
+    myGuessedWords,
+    opponentGuessedWords,
+    myWrongGuesses,
+    opponentWrongGuesses,
+    lastGuessResult,
     winner,
     finalWords,
     joinRoom,

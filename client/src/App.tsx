@@ -17,7 +17,6 @@ function App() {
   const [error, setError] = useState("");
   const [words, setWords] = useState<string[]>(Array(8).fill(""));
   const [confirmed, setConfirmed] = useState(false);
-  const [guess, setGuess] = useState("");
   const [celebratory, setCelebratory] = useState(false);
 
   useEffect(() => {
@@ -34,7 +33,11 @@ function App() {
     gameStarted,
     opponentWords,
     currentTurn,
-    guessedWords,
+    myGuessedWords,
+    opponentGuessedWords,
+    myWrongGuesses,
+    opponentWrongGuesses,
+    lastGuessResult,
     joinRoom,
     winner,
   } = useSocket(room, name);
@@ -60,6 +63,17 @@ function App() {
     setJoined(true);
     setError("");
   };
+  useEffect(() => {
+    if (!lastGuessResult) return;
+    const myId = socket.id ?? "";
+    if (!myId || lastGuessResult.playerId !== myId) return;
+    if (lastGuessResult.correct) {
+      setCelebratory(true);
+      const timeout = window.setTimeout(() => setCelebratory(false), 1200);
+      return () => window.clearTimeout(timeout);
+    }
+    setCelebratory(false);
+  }, [lastGuessResult, socket]);
   const handleConfirmWords = (wordsInput: string[]) => {
     socket.emit("confirm_words", { roomCode: room, playerId: socket.id ?? "", words: wordsInput });
     setWords(wordsInput);
@@ -68,7 +82,6 @@ function App() {
   const handleGuess = (guessValue: string) => {
     if (!guessValue.trim()) return;
     socket.emit("make_guess", { roomCode: room, playerId: socket.id ?? "", guess: guessValue, viewOpponent });
-    setGuess("");
     setCelebratory(false);
   };
   const handlePlayAgain = () => {
@@ -76,7 +89,6 @@ function App() {
     setConfirmed(false);
     setJoined(false);
     setViewOpponent(true);
-    setGuess("");
     setCelebratory(false);
     socket.emit("reset_game", { roomCode: room });
   };
@@ -122,18 +134,22 @@ function App() {
     );
   }
   if (gameStarted) {
+    const myGuessedCount = myGuessedWords.filter(idx => idx !== 0).length;
+    const opponentGuessedCount = opponentGuessedWords.filter(idx => idx !== 0).length;
     return (
       <GameBoard
         state={{
           myWordsLeft: words,
-          opponentWordsLeft: opponentWords.map((word, idx) => ({ word, revealed: guessedWords.includes(idx) })),
+          opponentWordsLeft: opponentWords.map((word, idx) => ({ word, revealed: myGuessedWords.includes(idx) })),
           isMyTurn: currentTurn === (socket.id ?? ""),
         }}
         onGuess={handleGuess}
-        guessValue={guess}
-        setGuessValue={setGuess}
         error={error}
         celebratory={celebratory}
+        myGuessedCount={myGuessedCount}
+        opponentGuessedCount={opponentGuessedCount}
+        myWrongGuesses={myWrongGuesses}
+        opponentWrongGuesses={opponentWrongGuesses}
       />
     );
   }

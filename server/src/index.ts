@@ -23,7 +23,7 @@ const playerWords: Record<string, Record<string, string[]>> = {};
 const confirmedPlayers: Record<string, Set<string>> = {};
 // Track revealed words and wrong guesses per room
 const revealedWords: Record<string, Record<string, number[]>> = {};
-const wrongGuesses: Record<string, string[]> = {};
+const wrongGuesses: Record<string, { playerId: string; guess: string }[]> = {};
 const currentTurn: Record<string, string> = {};
 const gameStatus: Record<
   string,
@@ -232,7 +232,7 @@ io.on("connection", (socket) => {
         // Player continues turn
         nextTurn = playerId;
       } else {
-        wrongGuesses[roomCode].push(guess);
+        wrongGuesses[roomCode].push({ guess, playerId });
         // Switch turn
         nextTurn = opponentId;
       }
