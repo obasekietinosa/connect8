@@ -19,6 +19,11 @@ export interface GuessResult {
   playerId: string;
 }
 
+export interface WrongGuess {
+  playerId: string;
+  guess: string;
+}
+
 export interface StartGameData {
   players: Player[];
   firstTurn: string;
@@ -42,7 +47,7 @@ export interface RoomStatePayload {
   currentTurn: string;
   playerWords: Record<string, string[]>;
   revealedWords: Record<string, number[]>;
-  wrongGuesses: string[];
+  wrongGuesses: WrongGuess[];
   winner: string | null;
   finalWords: { id: string; words: string[] }[];
 }
