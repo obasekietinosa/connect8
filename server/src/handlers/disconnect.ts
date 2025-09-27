@@ -6,31 +6,52 @@ import {
   playerWords,
   revealedWords,
   rooms,
+  socketToPlayer,
 } from "../state";
 import { emitRoomState } from "../utils/emitRoomState";
 
 export const createDisconnectHandler = (io: Server, socket: Socket) => () => {
-  for (const roomCode in rooms) {
-    const playerIndex = rooms[roomCode].findIndex((p) => p.id === socket.id);
-    if (playerIndex === -1) continue;
+  const mapping = socketToPlayer[socket.id];
 
-    const player = rooms[roomCode][playerIndex];
-
-    if (!disconnectedPlayers[roomCode]) {
-      disconnectedPlayers[roomCode] = {};
-    }
-
-    disconnectedPlayers[roomCode][socket.id] = {
-      name: player.name,
-      words: playerWords[roomCode]?.[socket.id] || [],
-      confirmed: confirmedPlayers[roomCode]?.has(socket.id) ?? false,
-      revealed: revealedWords[roomCode]?.[socket.id] || [],
-    };
-
-    rooms[roomCode][playerIndex] = { ...player, connected: false };
-    io.to(roomCode).emit("players_updated", rooms[roomCode]);
-    emitRoomState(io, roomCode);
+  if (!mapping) {
+    console.log("User disconnected without mapping:", socket.id);
+    return;
   }
+
+  const { roomCode, playerId } = mapping;
+  const playersInRoom = rooms[roomCode];
+
+  if (!playersInRoom) {
+    delete socketToPlayer[socket.id];
+    return;
+  }
+
+  const playerIndex = playersInRoom.findIndex((p) => p.id === playerId);
+
+  if (playerIndex === -1) {
+    delete socketToPlayer[socket.id];
+    return;
+  }
+
+  const player = playersInRoom[playerIndex];
+
+  if (!disconnectedPlayers[roomCode]) {
+    disconnectedPlayers[roomCode] = {};
+  }
+
+  disconnectedPlayers[roomCode][playerId] = {
+    playerId,
+    name: player.name,
+    words: playerWords[roomCode]?.[playerId] || [],
+    confirmed: confirmedPlayers[roomCode]?.has(playerId) ?? false,
+    revealed: revealedWords[roomCode]?.[playerId] || [],
+  };
+
+  rooms[roomCode][playerIndex] = { ...player, connected: false };
+  io.to(roomCode).emit("players_updated", rooms[roomCode]);
+  emitRoomState(io, roomCode);
+
+  delete socketToPlayer[socket.id];
 
   console.log("User disconnected:", socket.id);
 };

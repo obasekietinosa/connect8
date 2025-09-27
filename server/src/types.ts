@@ -1,4 +1,9 @@
-export type Player = { id: string; name: string; connected: boolean };
+export type Player = {
+  id: string;
+  name: string;
+  connected: boolean;
+  socketId: string;
+};
 
 export type Room = Record<string, Player[]>;
 
@@ -9,6 +14,7 @@ export type RoomStatus = {
 };
 
 export type DisconnectedPlayerSnapshot = {
+  playerId: string;
   name: string;
   words: string[];
   confirmed: boolean;

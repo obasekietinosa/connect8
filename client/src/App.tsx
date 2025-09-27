@@ -41,6 +41,7 @@ function App() {
     lastGuessResult,
     joinRoom,
     winner,
+    playerId,
   } = useSocket(room, name);
 
   const [joined, setJoined] = useState(false);
@@ -66,7 +67,7 @@ function App() {
   };
   useEffect(() => {
     if (!lastGuessResult) return;
-    const myId = socket.id ?? "";
+    const myId = playerId ?? "";
     if (!myId || lastGuessResult.playerId !== myId) return;
     if (lastGuessResult.correct) {
       setCelebratory(true);
@@ -74,15 +75,24 @@ function App() {
       return () => window.clearTimeout(timeout);
     }
     setCelebratory(false);
-  }, [lastGuessResult, socket]);
+  }, [lastGuessResult, playerId]);
   const handleConfirmWords = (wordsInput: string[]) => {
-    socket.emit("confirm_words", { roomCode: room, playerId: socket.id ?? "", words: wordsInput });
+    socket.emit("confirm_words", {
+      roomCode: room,
+      playerId: playerId ?? socket.id ?? "",
+      words: wordsInput,
+    });
     setWords(wordsInput);
     setConfirmed(true);
   };
   const handleGuess = (guessValue: string) => {
     if (!guessValue.trim()) return;
-    socket.emit("make_guess", { roomCode: room, playerId: socket.id ?? "", guess: guessValue, viewOpponent });
+    socket.emit("make_guess", {
+      roomCode: room,
+      playerId: playerId ?? socket.id ?? "",
+      guess: guessValue,
+      viewOpponent,
+    });
     setCelebratory(false);
   };
   const handlePlayAgain = () => {
@@ -128,7 +138,7 @@ function App() {
           shareUrl={shareUrl}
           onShare={handleShare}
           onStart={() => {}}
-          isHost={players[0]?.id === (socket.id ?? "")}
+          isHost={playerId !== null && players[0]?.id === playerId}
         />
         <WordInput onSubmit={handleConfirmWords} loading={confirmed} />
       </>
@@ -147,7 +157,7 @@ function App() {
         shareUrl={shareUrl}
         onShare={handleShare}
         onStart={() => {}}
-        isHost={players[0]?.id === (socket.id ?? "")}
+        isHost={playerId !== null && players[0]?.id === playerId}
         statusMessage={waitingMessage}
       />
     );
@@ -160,7 +170,7 @@ function App() {
         state={{
           myWordsLeft: words,
           opponentWordsLeft: opponentWords.map((word, idx) => ({ word, revealed: myGuessedWords.includes(idx) })),
-          isMyTurn: currentTurn === (socket.id ?? ""),
+          isMyTurn: currentTurn === (playerId ?? ""),
         }}
         onGuess={handleGuess}
         error={error}
@@ -175,7 +185,11 @@ function App() {
   if (winner) {
     return (
       <GameOver
-        winner={winner === (socket.id ?? "") ? name : players.find(p => p.id === winner)?.name || "Opponent"}
+        winner={
+          winner && playerId && winner === playerId
+            ? name
+            : players.find(p => p.id === winner)?.name || "Opponent"
+        }
         myWords={words}
         opponentWords={opponentWords}
         onRestart={handlePlayAgain}
