@@ -24,6 +24,7 @@ const boxStyle: React.CSSProperties = {
   fontWeight: 600,
   background: "#f8f8f8",
   color: "#222",
+  boxSizing: "border-box",
 };
 
 const inputStyle: React.CSSProperties = {
@@ -32,6 +33,21 @@ const inputStyle: React.CSSProperties = {
   textTransform: "uppercase",
   outline: "none",
 };
+
+const getInputStateStyles = (enabled: boolean): React.CSSProperties =>
+  enabled
+    ? {
+        background: "#fff",
+        borderColor: "#444",
+        color: "#222",
+        cursor: "text",
+      }
+    : {
+        background: "#edf2f7",
+        borderColor: "#cbd5e0",
+        color: "#718096",
+        cursor: "not-allowed",
+      };
 
 const GameBoard: React.FC<GameBoardProps> = ({
   state,
@@ -46,6 +62,21 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const currentWord = useMemo(
     () => state.opponentWordsLeft.find((entry) => !entry.revealed && entry.word.length > 0),
     [state.opponentWordsLeft],
+  );
+
+  const revealedWords = useMemo(
+    () => state.opponentWordsLeft.filter((entry) => entry.revealed && entry.word.length > 0),
+    [state.opponentWordsLeft],
+  );
+
+  const upcomingWords = useMemo(
+    () => state.opponentWordsLeft.filter((entry) => !entry.revealed && entry.word.length > 0),
+    [state.opponentWordsLeft],
+  );
+
+  const upcomingAfterCurrent = useMemo(
+    () => (upcomingWords.length > 1 ? upcomingWords.slice(1) : []),
+    [upcomingWords],
   );
 
   const firstLetter = currentWord?.word?.[0] ?? "";
@@ -118,8 +149,46 @@ const GameBoard: React.FC<GameBoardProps> = ({
     !!currentWord &&
     (letters.length === 0 || letters.every((letter) => letter.length === 1));
 
+  const renderWordSkeleton = (word: string) => (
+    <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+      {word.split("").map((char, idx) => (
+        <div
+          key={`${word}-${idx}`}
+          style={{
+            ...boxStyle,
+            background: idx === 0 ? "#fff" : "#f8f8f8",
+            borderColor: "#cbd5e0",
+            color: idx === 0 ? "#2d3748" : "#cbd5e0",
+          }}
+        >
+          {idx === 0 ? char.toUpperCase() : ""}
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderCompletedWord = (word: string) => (
+    <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+      {word.split("").map((char, idx) => (
+        <div
+          key={`${word}-revealed-${idx}`}
+          style={{
+            ...boxStyle,
+            background: "#f0fff4",
+            borderColor: "#38a169",
+            color: "#22543d",
+          }}
+        >
+          {char.toUpperCase()}
+        </div>
+      ))}
+    </div>
+  );
+
   const guessableTotal = Math.max(state.opponentWordsLeft.length - 1, 1);
   const defendTotal = Math.max(state.myWordsLeft.length - 1, 1);
+
+  const isWaiting = !state.isMyTurn && !celebratory;
 
   return (
     <div style={{ padding: 32, maxWidth: 720, margin: "0 auto", textAlign: "center" }}>
@@ -181,6 +250,50 @@ const GameBoard: React.FC<GameBoardProps> = ({
         </details>
       </div>
 
+      {revealedWords.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 600,
+              color: "#2f855a",
+              textTransform: "uppercase",
+              letterSpacing: 1.2,
+              marginBottom: 12,
+            }}
+          >
+            Completed words
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {revealedWords.map((entry, idx) => (
+              <div key={`${entry.word}-completed-${idx}`}>{renderCompletedWord(entry.word)}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {upcomingAfterCurrent.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 600,
+              color: "#2c5282",
+              textTransform: "uppercase",
+              letterSpacing: 1.2,
+              marginBottom: 12,
+            }}
+          >
+            Coming up next
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {upcomingAfterCurrent.map((entry, idx) => (
+              <div key={`${entry.word}-upcoming-${idx}`}>{renderWordSkeleton(entry.word)}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div
         style={{
           minHeight: 200,
@@ -193,10 +306,32 @@ const GameBoard: React.FC<GameBoardProps> = ({
         {celebratory ? (
           <div style={{ fontSize: 96, color: "#38a169" }}>✓</div>
         ) : currentWord ? (
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ fontSize: 18, color: "#555" }}>Current word</div>
+          <form
+            onSubmit={handleSubmit}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+              padding: 24,
+              borderRadius: 16,
+              border: "1px solid #e2e8f0",
+              background: isWaiting ? "#f7fafc" : "#fff",
+              boxShadow: "0 12px 30px rgba(15, 23, 42, 0.08)",
+              opacity: isWaiting ? 0.7 : 1,
+            }}
+          >
+            <div style={{ fontSize: 18, color: "#2d3748", fontWeight: 600 }}>Current word</div>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-              <div style={boxStyle}>{firstLetter.toUpperCase()}</div>
+              <div
+                style={{
+                  ...boxStyle,
+                  ...(isWaiting
+                    ? { background: "#edf2f7", borderColor: "#cbd5e0", color: "#4a5568" }
+                    : {}),
+                }}
+              >
+                {firstLetter.toUpperCase()}
+              </div>
               {letters.map((letter, idx) => (
                 <input
                   key={idx}
@@ -210,11 +345,27 @@ const GameBoard: React.FC<GameBoardProps> = ({
                   onChange={(event) => handleLetterChange(idx, event.target.value)}
                   onKeyDown={(event) => handleKeyDown(idx, event)}
                   disabled={!state.isMyTurn}
-                  style={inputStyle}
+                  style={{
+                    ...inputStyle,
+                    ...getInputStateStyles(state.isMyTurn),
+                  }}
                 />
               ))}
             </div>
-            <button type="submit" disabled={!canSubmit} style={{ padding: "12px 24px", fontSize: 16 }}>
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              style={{
+                padding: "12px 24px",
+                fontSize: 16,
+                borderRadius: 999,
+                border: "none",
+                background: canSubmit ? "#3182ce" : "#a0aec0",
+                color: "white",
+                cursor: canSubmit ? "pointer" : "not-allowed",
+                transition: "background 0.2s ease",
+              }}
+            >
               Submit guess
             </button>
           </form>
@@ -224,8 +375,24 @@ const GameBoard: React.FC<GameBoardProps> = ({
       </div>
 
       {error && <div style={{ color: "#c53030", marginBottom: 16 }}>{error}</div>}
-      {!state.isMyTurn && !celebratory && (
-        <div style={{ color: "#666" }}>Waiting for opponent's turn...</div>
+      {isWaiting && (
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 20px",
+            borderRadius: 999,
+            background: "#ebf8ff",
+            color: "#2b6cb0",
+            fontWeight: 600,
+          }}
+        >
+          <span role="img" aria-hidden="true">
+            ⏳
+          </span>
+          Waiting for opponent's turn
+        </div>
       )}
     </div>
   );
