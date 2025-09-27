@@ -6,6 +6,7 @@ import {
   ensureRoomState,
   gameStatus,
   playerWords,
+  revealedWords,
   rooms,
 } from "../state";
 import { emitRoomState } from "../utils/emitRoomState";
@@ -33,6 +34,20 @@ export const createConfirmWordsHandler = (io: Server, socket: Socket) =>
         name: player.name,
         words: playerWords[roomCode][player.id] || [],
       }));
+
+      if (!revealedWords[roomCode]) {
+        revealedWords[roomCode] = {};
+      }
+
+      playersWithWords.forEach(({ id, words }) => {
+        if (!revealedWords[roomCode][id]) {
+          revealedWords[roomCode][id] = [];
+        }
+        const firstWord = words[0]?.trim();
+        if (firstWord && !revealedWords[roomCode][id].includes(0)) {
+          revealedWords[roomCode][id].push(0);
+        }
+      });
 
       const firstTurn =
         playersWithWords[Math.floor(Math.random() * playersWithWords.length)].id;

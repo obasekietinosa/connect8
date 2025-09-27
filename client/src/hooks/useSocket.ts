@@ -62,11 +62,14 @@ export function useSocket(room: string, name: string) {
     });
     socket.on("start_game", (data: StartGameData) => {
       const opponent = data.players.find((p) => p.id !== socket.id);
+      const me = data.players.find((p) => p.id === socket.id);
+      const opponentFirstWord = opponent?.words?.[0]?.trim();
+      const myFirstWord = me?.words?.[0]?.trim();
       setOpponentWords(opponent?.words || []);
       setGameStarted(true);
       setCurrentTurn(data.firstTurn);
-      setMyGuessedWords([]);
-      setOpponentGuessedWords([]);
+      setMyGuessedWords(opponentFirstWord ? [0] : []);
+      setOpponentGuessedWords(myFirstWord ? [0] : []);
       setMyWrongGuesses([]);
       setOpponentWrongGuesses([]);
       setLastGuessResult(null);
