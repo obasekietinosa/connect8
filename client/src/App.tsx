@@ -30,6 +30,7 @@ function App() {
   const {
     socket,
     players,
+    confirmedPlayers,
     gameStarted,
     opponentWords,
     currentTurn,
@@ -131,6 +132,24 @@ function App() {
         />
         <WordInput onSubmit={handleConfirmWords} loading={confirmed} />
       </>
+    );
+  }
+  if (!gameStarted && confirmed) {
+    const totalPlayers = players.length;
+    const confirmedCount = Math.min(confirmedPlayers.length, totalPlayers || confirmedPlayers.length);
+    const waitingMessage = totalPlayers > 1
+      ? `Waiting for other players to submit their words (${confirmedCount}/${totalPlayers})...`
+      : "Waiting for another player to join...";
+    return (
+      <Lobby
+        room={room}
+        players={players}
+        shareUrl={shareUrl}
+        onShare={handleShare}
+        onStart={() => {}}
+        isHost={players[0]?.id === (socket.id ?? "")}
+        statusMessage={waitingMessage}
+      />
     );
   }
   if (gameStarted) {
