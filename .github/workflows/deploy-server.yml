@@ -36,4 +36,4 @@ jobs:
           remote-user: ${{ secrets.SSH_USER }}
           private-ssh-key: ${{ secrets.SSH_KEY }}
           source-path: ./server/
-          destination-path: ./
+          destination-path: ./server/
