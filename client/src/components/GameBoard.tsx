@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { GameState } from "../types";
+import {
+  analyzeWordStructure,
+  buildGuessFromLetters,
+  sanitizeLetterInput,
+} from "../utils/wordHelpers";
 
 interface GameBoardProps {
   state: GameState;
@@ -82,23 +87,10 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const firstLetter = currentWord?.word?.[0] ?? "";
   const currentWordText = currentWord?.word ?? "";
 
-  const tailCharacters = useMemo(() => currentWordText.slice(1).split(""), [currentWordText]);
-
-  const characterIndexToLetterIndex = useMemo(() => {
-    const map: Record<number, number> = {};
-    let letterIndex = 0;
-    tailCharacters.forEach((char, idx) => {
-      if (char !== " ") {
-        map[idx] = letterIndex;
-        letterIndex += 1;
-      }
-    });
-    return map;
-  }, [tailCharacters]);
-
-  const missingLettersCount = useMemo(() => Object.keys(characterIndexToLetterIndex).length, [
-    characterIndexToLetterIndex,
-  ]);
+  const { tailCharacters, characterIndexToLetterIndex, missingLettersCount } = useMemo(
+    () => analyzeWordStructure(currentWordText),
+    [currentWordText],
+  );
 
   const [letters, setLetters] = useState<string[]>(() => Array(missingLettersCount).fill(""));
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
@@ -120,8 +112,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   }, [letters, state.isMyTurn, celebratory]);
 
   const handleLetterChange = (index: number, value: string) => {
-    const trimmed = value.slice(-1);
-    const sanitized = trimmed.replace(/[^a-zA-Z]/g, "").toUpperCase();
+    const sanitized = sanitizeLetterInput(value);
     setLetters((prev) => {
       const next = [...prev];
       next[index] = sanitized;
@@ -157,10 +148,12 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!state.isMyTurn || celebratory || !currentWord) return;
-    const tailGuess = tailCharacters
-      .map((char, idx) => (char === " " ? " " : letters[characterIndexToLetterIndex[idx]] ?? ""))
-      .join("");
-    const guess = `${firstLetter}${tailGuess}`;
+    const guess = buildGuessFromLetters(
+      firstLetter,
+      tailCharacters,
+      characterIndexToLetterIndex,
+      letters,
+    );
     if (!guess.trim()) return;
     onGuess(guess);
   };
