@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "npm run build:test && node --experimental-specifier-resolution=node --test dist-tests/tests/*.test.js",
+    "build:test": "rm -rf dist-tests && tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "@types/react-router-dom": "^5.3.3",
