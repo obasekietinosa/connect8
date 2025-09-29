@@ -8,6 +8,8 @@ export const wrongGuesses: Record<string, { playerId: string; guess: string }[]>
 export const currentTurn: Record<string, string> = {};
 export const gameStatus: Record<string, RoomStatus> = {};
 export const disconnectedPlayers: Record<string, Record<string, DisconnectedPlayerSnapshot>> = {};
+export const turnDeadlines: Record<string, number | null> = {};
+export const turnTimeouts: Record<string, NodeJS.Timeout | null> = {};
 export const socketToPlayer: Record<
   string,
   { roomCode: string; playerId: string }
@@ -23,6 +25,17 @@ export const ensureRoomState = (roomCode: string) => {
     gameStatus[roomCode] = { started: false, winner: null, finalWords: [] };
   }
   if (!disconnectedPlayers[roomCode]) disconnectedPlayers[roomCode] = {};
+  if (!(roomCode in turnDeadlines)) turnDeadlines[roomCode] = null;
+  if (!(roomCode in turnTimeouts)) turnTimeouts[roomCode] = null;
+};
+
+export const clearTurnTimer = (roomCode: string) => {
+  const existing = turnTimeouts[roomCode];
+  if (existing) {
+    clearTimeout(existing);
+  }
+  turnTimeouts[roomCode] = null;
+  turnDeadlines[roomCode] = null;
 };
 
 export const resetRoomState = (roomCode: string) => {
@@ -42,4 +55,5 @@ export const resetRoomState = (roomCode: string) => {
   wrongGuesses[roomCode] = [];
   currentTurn[roomCode] = "";
   gameStatus[roomCode] = { started: false, winner: null, finalWords: [] };
+  clearTurnTimer(roomCode);
 };

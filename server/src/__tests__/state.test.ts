@@ -8,9 +8,12 @@ import {
   ensureRoomState,
   gameStatus,
   playerWords,
+  clearTurnTimer,
   resetRoomState,
   revealedWords,
   rooms,
+  turnDeadlines,
+  turnTimeouts,
   wrongGuesses,
 } from "../state";
 import type { RoomStatus } from "../types";
@@ -18,6 +21,7 @@ import type { RoomStatus } from "../types";
 const ROOM_CODE = "TEST_ROOM";
 
 const clearRoomState = (roomCode: string) => {
+  clearTurnTimer(roomCode);
   delete rooms[roomCode];
   delete playerWords[roomCode];
   delete confirmedPlayers[roomCode];
@@ -26,6 +30,8 @@ const clearRoomState = (roomCode: string) => {
   delete currentTurn[roomCode];
   delete gameStatus[roomCode];
   delete disconnectedPlayers[roomCode];
+  delete turnDeadlines[roomCode];
+  delete turnTimeouts[roomCode];
 };
 
 beforeEach(() => {
@@ -49,6 +55,8 @@ describe("ensureRoomState", () => {
     assert.deepEqual(gameStatus[ROOM_CODE], getDefaultGameStatus());
     assert.deepEqual(disconnectedPlayers[ROOM_CODE], {});
     assert.equal(currentTurn[ROOM_CODE], undefined);
+    assert.equal(turnDeadlines[ROOM_CODE], null);
+    assert.equal(turnTimeouts[ROOM_CODE], null);
   });
 
   it("preserves existing state containers", () => {
@@ -83,5 +91,7 @@ describe("resetRoomState", () => {
     assert.deepEqual(wrongGuesses[ROOM_CODE], []);
     assert.equal(currentTurn[ROOM_CODE], "");
     assert.deepEqual(gameStatus[ROOM_CODE], getDefaultGameStatus());
+    assert.equal(turnDeadlines[ROOM_CODE], null);
+    assert.equal(turnTimeouts[ROOM_CODE], null);
   });
 });

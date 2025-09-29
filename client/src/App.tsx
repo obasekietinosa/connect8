@@ -7,6 +7,7 @@ import JoinRoom from "./components/JoinRoom";
 import Lobby from "./components/Lobby";
 import WordInput from "./components/WordInput";
 import GameBoard from "./components/GameBoard";
+import TurnTimer from "./components/TurnTimer";
 import GameOver from "./components/GameOver";
 
 function App() {
@@ -42,6 +43,7 @@ function App() {
     joinRoom,
     winner,
     playerId,
+    turnDeadline,
   } = useSocket(room, name);
 
   const [joined, setJoined] = useState(false);
@@ -116,6 +118,19 @@ function App() {
   if (showLanding) {
     return <Landing onStart={handleStartGame} onJoin={handleJoinGame} />;
   }
+  const myId = playerId ?? "";
+  const activePlayer = players.find(player => player.id === currentTurn);
+  const timerOverlay = joined ? (
+    <TurnTimer
+      turnDeadline={turnDeadline}
+      isMyTurn={gameStarted && currentTurn === myId}
+      activePlayerName={activePlayer?.name ?? (currentTurn ? "Opponent" : "")}
+      totalSeconds={20}
+      gameStarted={gameStarted}
+      winner={winner}
+    />
+  ) : null;
+
   if (!joined) {
     return (
       <JoinRoom
@@ -132,6 +147,7 @@ function App() {
   if (!gameStarted && !confirmed) {
     return (
       <>
+        {timerOverlay}
         <Lobby
           room={room}
           players={players}
@@ -151,49 +167,58 @@ function App() {
       ? `Waiting for other players to submit their words (${confirmedCount}/${totalPlayers})...`
       : "Waiting for another player to join...";
     return (
-      <Lobby
-        room={room}
-        players={players}
-        shareUrl={shareUrl}
-        onShare={handleShare}
-        onStart={() => {}}
-        isHost={playerId !== null && players[0]?.id === playerId}
-        statusMessage={waitingMessage}
-      />
+      <>
+        {timerOverlay}
+        <Lobby
+          room={room}
+          players={players}
+          shareUrl={shareUrl}
+          onShare={handleShare}
+          onStart={() => {}}
+          isHost={playerId !== null && players[0]?.id === playerId}
+          statusMessage={waitingMessage}
+        />
+      </>
     );
   }
   if (gameStarted) {
     const myGuessedCount = myGuessedWords.filter(idx => idx !== 0).length;
     const opponentGuessedCount = opponentGuessedWords.filter(idx => idx !== 0).length;
     return (
-      <GameBoard
-        state={{
-          myWordsLeft: words,
-          opponentWordsLeft: opponentWords.map((word, idx) => ({ word, revealed: myGuessedWords.includes(idx) })),
-          isMyTurn: currentTurn === (playerId ?? ""),
-        }}
-        onGuess={handleGuess}
-        error={error}
-        celebratory={celebratory}
-        myGuessedCount={myGuessedCount}
-        opponentGuessedCount={opponentGuessedCount}
-        myWrongGuesses={myWrongGuesses}
-        opponentWrongGuesses={opponentWrongGuesses}
-      />
+      <>
+        {timerOverlay}
+        <GameBoard
+          state={{
+            myWordsLeft: words,
+            opponentWordsLeft: opponentWords.map((word, idx) => ({ word, revealed: myGuessedWords.includes(idx) })),
+            isMyTurn: currentTurn === (playerId ?? ""),
+          }}
+          onGuess={handleGuess}
+          error={error}
+          celebratory={celebratory}
+          myGuessedCount={myGuessedCount}
+          opponentGuessedCount={opponentGuessedCount}
+          myWrongGuesses={myWrongGuesses}
+          opponentWrongGuesses={opponentWrongGuesses}
+        />
+      </>
     );
   }
   if (winner) {
     return (
-      <GameOver
-        winner={
-          winner && playerId && winner === playerId
-            ? name
-            : players.find(p => p.id === winner)?.name || "Opponent"
-        }
-        myWords={words}
-        opponentWords={opponentWords}
-        onRestart={handlePlayAgain}
-      />
+      <>
+        {timerOverlay}
+        <GameOver
+          winner={
+            winner && playerId && winner === playerId
+              ? name
+              : players.find(p => p.id === winner)?.name || "Opponent"
+          }
+          myWords={words}
+          opponentWords={opponentWords}
+          onRestart={handlePlayAgain}
+        />
+      </>
     );
   }
   return null;
