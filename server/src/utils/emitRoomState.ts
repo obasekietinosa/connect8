@@ -7,6 +7,7 @@ import {
   playerWords,
   revealedWords,
   rooms,
+  turnDeadlines,
   wrongGuesses,
 } from "../state";
 
@@ -32,5 +33,6 @@ export const emitRoomState = (io: Server, roomCode: string) => {
     wrongGuesses: wrong,
     winner: status.winner,
     finalWords: status.finalWords,
+    turnDeadline: turnDeadlines[roomCode] ?? null,
   });
 };

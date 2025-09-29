@@ -9,8 +9,10 @@ import {
   revealedWords,
   rooms,
   socketToPlayer,
+  turnDeadlines,
 } from "../state";
 import { emitRoomState } from "../utils/emitRoomState";
+import { scheduleTurnTimer } from "../utils/turnTimer";
 
 type ConfirmWordsPayload = {
   roomCode: string;
@@ -66,9 +68,12 @@ export const createConfirmWordsHandler = (io: Server, socket: Socket) =>
       currentTurn[roomCode] = firstTurn;
       gameStatus[roomCode] = { started: true, winner: null, finalWords: [] };
 
+      scheduleTurnTimer(io, roomCode, firstTurn);
+
       io.to(roomCode).emit("start_game", {
         players: playersWithWords,
         firstTurn,
+        turnDeadline: turnDeadlines[roomCode] ?? null,
       });
 
       emitRoomState(io, roomCode);

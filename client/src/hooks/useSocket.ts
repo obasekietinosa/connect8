@@ -41,6 +41,7 @@ export function useSocket(room: string, name: string) {
   const [lastGuessResult, setLastGuessResult] = useState<GuessResult | null>(null);
   const [winner, setWinner] = useState<string | null>(null);
   const [finalWords, setFinalWords] = useState<GameEndData["players"]>([]);
+  const [turnDeadline, setTurnDeadline] = useState<number | null>(null);
 
   let initialJoinDetails: JoinDetails | null = null;
   if (typeof window !== "undefined") {
@@ -138,6 +139,7 @@ export function useSocket(room: string, name: string) {
       setMyWrongGuesses([]);
       setOpponentWrongGuesses([]);
       setLastGuessResult(null);
+      setTurnDeadline(data.turnDeadline ?? null);
     };
 
     const handleGuessResult = (result: GuessResult) => {
@@ -164,12 +166,14 @@ export function useSocket(room: string, name: string) {
       }
       setCurrentTurn(result.nextTurn);
       setLastGuessResult(result);
+      setTurnDeadline(result.turnDeadline ?? null);
     };
 
     const handleGameEnd = (data: GameEndData) => {
       setGameStarted(false);
       setWinner(data.winner);
       setFinalWords(data.players);
+      setTurnDeadline(null);
     };
 
     const handleGameReset = () => {
@@ -184,6 +188,7 @@ export function useSocket(room: string, name: string) {
       setWinner(null);
       setFinalWords([]);
       setLastGuessResult(null);
+      setTurnDeadline(null);
     };
 
     const handleConnect = () => {
@@ -238,17 +243,19 @@ export function useSocket(room: string, name: string) {
             opponentWrong.push(entry.guess);
           }
         });
-        setMyWrongGuesses(myWrong);
-        setOpponentWrongGuesses(opponentWrong);
-        setCurrentTurn(state.currentTurn);
-      } else {
-        setGameStarted(false);
-        setCurrentTurn(state.currentTurn || "");
-        if (!state.winner) {
-          setOpponentWords([]);
-          setMyGuessedWords([]);
-          setOpponentGuessedWords([]);
-          setMyWrongGuesses([]);
+      setMyWrongGuesses(myWrong);
+      setOpponentWrongGuesses(opponentWrong);
+      setCurrentTurn(state.currentTurn);
+      setTurnDeadline(state.turnDeadline ?? null);
+    } else {
+      setGameStarted(false);
+      setCurrentTurn(state.currentTurn || "");
+      setTurnDeadline(state.turnDeadline ?? null);
+      if (!state.winner) {
+        setOpponentWords([]);
+        setMyGuessedWords([]);
+        setOpponentGuessedWords([]);
+        setMyWrongGuesses([]);
           setOpponentWrongGuesses([]);
         }
       }
@@ -332,5 +339,6 @@ export function useSocket(room: string, name: string) {
     finalWords,
     joinRoom,
     playerId,
+    turnDeadline,
   };
 }

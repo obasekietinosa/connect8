@@ -1,14 +1,17 @@
 import { Server } from "socket.io";
 
 import {
+  clearTurnTimer,
   currentTurn,
   gameStatus,
   playerWords,
   revealedWords,
   rooms,
+  turnDeadlines,
   wrongGuesses,
 } from "../state";
 import { emitRoomState } from "../utils/emitRoomState";
+import { scheduleTurnTimer } from "../utils/turnTimer";
 
 type MakeGuessPayload = {
   roomCode: string;
@@ -53,6 +56,7 @@ export const createMakeGuessHandler = (io: Server) =>
       const revealedNonFirst = revealedWords[roomCode][opponentId].filter((i) => i !== 0);
 
       if (revealedNonFirst.length === 7) {
+        clearTurnTimer(roomCode);
         gameStatus[roomCode] = {
           started: false,
           winner: playerId,
@@ -80,6 +84,11 @@ export const createMakeGuessHandler = (io: Server) =>
       nextTurn = opponentId;
     }
 
+    currentTurn[roomCode] = nextTurn;
+
+    scheduleTurnTimer(io, roomCode, nextTurn);
+    const nextDeadline = turnDeadlines[roomCode] ?? null;
+
     io.to(roomCode).emit("guess_result", {
       correct,
       index: correct ? index : undefined,
@@ -87,8 +96,8 @@ export const createMakeGuessHandler = (io: Server) =>
       nextTurn,
       revealed: correct ? [index] : [],
       playerId,
+      turnDeadline: nextDeadline,
     });
 
-    currentTurn[roomCode] = nextTurn;
     emitRoomState(io, roomCode);
   };

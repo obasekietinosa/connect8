@@ -12,6 +12,9 @@ import {
   revealedWords,
   rooms,
   socketToPlayer,
+  clearTurnTimer,
+  turnDeadlines,
+  turnTimeouts,
   wrongGuesses,
 } from "../state";
 import { createConfirmWordsHandler } from "../handlers/confirmWords";
@@ -60,6 +63,7 @@ const createMockSocket = (id: string) => {
 };
 
 const clearRoomState = (roomCode: string) => {
+  clearTurnTimer(roomCode);
   delete rooms[roomCode];
   delete playerWords[roomCode];
   delete confirmedPlayers[roomCode];
@@ -68,6 +72,8 @@ const clearRoomState = (roomCode: string) => {
   delete currentTurn[roomCode];
   delete gameStatus[roomCode];
   delete disconnectedPlayers[roomCode];
+  delete turnDeadlines[roomCode];
+  delete turnTimeouts[roomCode];
   for (const socketId of Object.keys(socketToPlayer)) {
     if (socketToPlayer[socketId].roomCode === roomCode) {
       delete socketToPlayer[socketId];
@@ -143,6 +149,7 @@ describe("createJoinRoomHandler", () => {
         wrongGuesses: [],
         winner: null,
         finalWords: [],
+        turnDeadline: null,
       },
     });
   });
@@ -202,9 +209,12 @@ describe("createConfirmWordsHandler", () => {
     const startGamePayload = startGameEvents[0].payload as {
       players: Player[];
       firstTurn: string;
+      turnDeadline: number | null;
     };
     assert.equal(startGamePayload.players.length, 2);
     assert.ok(["alice", "bob"].includes(startGamePayload.firstTurn));
+    assert.equal(typeof startGamePayload.turnDeadline, "number");
+    assert.equal(typeof turnDeadlines[ROOM_CODE], "number");
 
     const roomStates = events.filter((event) => event.event === "room_state");
     assert.equal(roomStates.length >= 2, true);
@@ -232,6 +242,7 @@ describe("createMakeGuessHandler", () => {
     revealedWords[ROOM_CODE]["alice"] = [];
     revealedWords[ROOM_CODE]["bob"] = [];
     wrongGuesses[ROOM_CODE] = [];
+    gameStatus[ROOM_CODE] = { started: true, winner: null, finalWords: [] };
   });
 
   it("marks correct guesses and keeps the turn", () => {
@@ -252,12 +263,14 @@ describe("createMakeGuessHandler", () => {
       index?: number;
       nextTurn: string;
       revealed: number[];
+      turnDeadline: number | null;
     };
 
     assert.equal(payload.correct, true);
     assert.equal(payload.index, 0);
     assert.deepEqual(payload.revealed, [0]);
     assert.equal(payload.nextTurn, "alice");
+    assert.equal(typeof payload.turnDeadline, "number");
     assert.equal(currentTurn[ROOM_CODE], "alice");
     assert.deepEqual(revealedWords[ROOM_CODE]["bob"], [0]);
     assert.deepEqual(wrongGuesses[ROOM_CODE], []);
@@ -280,11 +293,13 @@ describe("createMakeGuessHandler", () => {
       correct: boolean;
       nextTurn: string;
       revealed: number[];
+      turnDeadline: number | null;
     };
 
     assert.equal(payload.correct, false);
     assert.equal(payload.nextTurn, "bob");
     assert.deepEqual(payload.revealed, []);
+    assert.equal(typeof payload.turnDeadline, "number");
     assert.equal(currentTurn[ROOM_CODE], "bob");
     assert.deepEqual(wrongGuesses[ROOM_CODE], [{ playerId: "alice", guess: "Elephant" }]);
   });

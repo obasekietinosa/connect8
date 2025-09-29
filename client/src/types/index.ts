@@ -18,6 +18,8 @@ export interface GuessResult {
   nextTurn: string;
   revealed: number[];
   playerId: string;
+  timeout?: boolean;
+  turnDeadline?: number | null;
 }
 
 export interface WrongGuess {
@@ -28,6 +30,7 @@ export interface WrongGuess {
 export interface StartGameData {
   players: Player[];
   firstTurn: string;
+  turnDeadline: number | null;
 }
 
 export interface RevealedWord {
@@ -51,4 +54,5 @@ export interface RoomStatePayload {
   wrongGuesses: WrongGuess[];
   winner: string | null;
   finalWords: { id: string; words: string[] }[];
+  turnDeadline: number | null;
 }
