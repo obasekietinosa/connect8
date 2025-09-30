@@ -1,7 +1,9 @@
 import { Server, Socket } from "socket.io";
 
 import {
+  clearTurnTimer,
   confirmedPlayers,
+  currentTurn,
   disconnectedPlayers,
   playerWords,
   revealedWords,
@@ -48,6 +50,13 @@ export const createDisconnectHandler = (io: Server, socket: Socket) => () => {
   };
 
   rooms[roomCode][playerIndex] = { ...player, connected: false };
+
+  const anyPlayersStillConnected = rooms[roomCode].some((roomPlayer) => roomPlayer.connected);
+
+  if (!anyPlayersStillConnected || currentTurn[roomCode] === playerId) {
+    clearTurnTimer(roomCode);
+  }
+
   io.to(roomCode).emit("players_updated", rooms[roomCode]);
   emitRoomState(io, roomCode);
 
