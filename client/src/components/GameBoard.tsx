@@ -287,28 +287,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
         </div>
       )}
 
-      {upcomingAfterCurrent.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <div
-            style={{
-              fontSize: 16,
-              fontWeight: 600,
-              color: "#2c5282",
-              textTransform: "uppercase",
-              letterSpacing: 1.2,
-              marginBottom: 12,
-            }}
-          >
-            Coming up next
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {upcomingAfterCurrent.map((entry, idx) => (
-              <div key={`${entry.word}-upcoming-${idx}`}>{renderWordSkeleton(entry.word)}</div>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div
         style={{
           minHeight: 200,
@@ -397,6 +375,28 @@ const GameBoard: React.FC<GameBoardProps> = ({
           <div style={{ fontSize: 20, color: "#555" }}>All opponent words have been revealed!</div>
         )}
       </div>
+
+      {upcomingAfterCurrent.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 600,
+              color: "#2c5282",
+              textTransform: "uppercase",
+              letterSpacing: 1.2,
+              marginBottom: 12,
+            }}
+          >
+            Pending words
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {upcomingAfterCurrent.map((entry, idx) => (
+              <div key={`${entry.word}-upcoming-${idx}`}>{renderWordSkeleton(entry.word)}</div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error && <div style={{ color: "#c53030", marginBottom: 16 }}>{error}</div>}
       {isWaiting && (
